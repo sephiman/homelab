@@ -31,24 +31,59 @@ For clients outside your LAN to connect, forward these ports to the host:
 
 Only needed if you intend to use RustDesk from outside your local network.
 
-## Configure the relay domain
+## Configure the relay domain (.env)
 
-The compose ships with `command: hbbs -r rustdesk.example.com:21117`. You must **replace `rustdesk.example.com` with the domain (or public IP) pointing at the host**. That's the address RustDesk clients will announce as relay.
+The `hbbs` command in `docker-compose.yml` reads the relay address from environment variables:
 
-Options:
+```yaml
+command: hbbs -r ${RUSTDESK_RELAY_HOST}:${RUSTDESK_RELAY_PORT}
+```
 
-- Edit the `command` directly.
-- If you don't have a domain, use the public IP: `-r 1.2.3.4:21117`.
-- If you'll only use it on the LAN, the server's local IP is enough.
+Docker Compose substitutes those tokens at parse time using the `.env` file sitting next to the compose. Copy the template and fill it in with your real public address:
 
-After changing it, `docker compose up -d` recreates the container with the new config.
+```bash
+cp .env.example .env
+```
+
+```dotenv
+# .env
+RUSTDESK_RELAY_HOST=rustdesk.mydomain.com   # or a public IP, or LAN IP for LAN-only use
+RUSTDESK_RELAY_PORT=21117                   # must match the hbbr port published below
+```
+
+- If you don't have a domain: `RUSTDESK_RELAY_HOST=1.2.3.4`.
+- LAN-only setup: `RUSTDESK_RELAY_HOST=192.168.x.x`.
+- The `.env` file is in `.gitignore` so the real domain never ends up in the repo.
+
+After editing `.env`, recreate the container so it picks up the new command:
+
+```bash
+docker compose up -d
+```
+
+Verify it took effect:
+
+```bash
+docker inspect rustdesk-hbbs --format '{{.Args}}'
+# → [hbbs -r rustdesk.mydomain.com:21117]
+```
+
+> **Note:** the `command:` directive is interpolated by Compose at YAML parse time, not by the shell inside the container. That means `${VAR}` is replaced *before* the container starts — no shell expansion happens inside RustDesk. This is why the `.env` file must live in the same folder as `docker-compose.yml`.
 
 ## Bind mounts
 
-Each service stores its key and state in its own subfolder on the host:
+Each service stores its key and state in its own subfolder under the home directory of the user running Docker:
 
-- `/home/juanjo/docker/rustdesk/hbbs` → `/root` (hbbs)
-- `/home/juanjo/docker/rustdesk/hbbr` → `/root` (hbbr)
+- `${HOME}/rustdesk/hbbs` → `/root` (hbbs)
+- `${HOME}/rustdesk/hbbr` → `/root` (hbbr)
+
+`${HOME}` is resolved by Docker Compose from the shell environment of whoever runs `docker compose up`, so the path is portable across machines/users without editing the compose. On your server it expands to `/home/juanjo/rustdesk/...`.
+
+Create the folders before the first `up` (Docker would create them owned by root otherwise):
+
+```bash
+mkdir -p "$HOME/rustdesk/hbbs" "$HOME/rustdesk/hbbr"
+```
 
 On first boot `hbbs` generates a key pair (`id_ed25519` / `id_ed25519.pub`). The public key is what you paste into each RustDesk client to validate the server. Back up these directories.
 
@@ -66,13 +101,13 @@ docker compose up -d
 
 In each client, *Settings → Network → ID/Relay Server*:
 
-- **ID Server:** `rustdesk.example.com` (or the host IP).
+- **ID Server:** the value of `RUSTDESK_RELAY_HOST` from `.env` (your domain or host IP).
 - **Relay Server:** leave blank — the value passed to hbbs via `-r` is used automatically.
 - **API Server:** leave blank.
 - **Key:** contents of `id_ed25519.pub` (no line breaks). Get it with:
 
   ```bash
-  cat /home/juanjo/docker/rustdesk/hbbs/id_ed25519.pub
+  cat "$HOME/rustdesk/hbbs/id_ed25519.pub"
   ```
 
 Once the key is configured, the client will only connect through your server.

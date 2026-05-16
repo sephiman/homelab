@@ -2,9 +2,9 @@ services:
   rustdesk-hbbs:
     image: rustdesk/rustdesk-server:latest
     container_name: rustdesk-hbbs
-    command: hbbs -r rustdesk.example.com:21117
+    command: hbbs -r ${RUSTDESK_RELAY_HOST}:${RUSTDESK_RELAY_PORT}
     volumes:
-      - /home/juanjo/docker/rustdesk/hbbs:/root
+      - ${HOME}/rustdesk/hbbs:/root
     ports:
       - "21115:21115"
       - "21116:21116"
@@ -18,7 +18,7 @@ services:
     container_name: rustdesk-hbbr
     command: hbbr
     volumes:
-      - /home/juanjo/docker/rustdesk/hbbr:/root
+      - ${HOME}/rustdesk/hbbr:/root
     ports:
       - "21117:21117"
     restart: unless-stopped
