@@ -1,0 +1,49 @@
+services:
+  mosquitto:
+    container_name: mqtt
+    image: eclipse-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ${HOME}/homeassistant/zigbee/mosquitto/config:/mosquitto/config
+      - ${HOME}/homeassistant/zigbee/mosquitto/data:/mosquitto/data
+      - ${HOME}/homeassistant/zigbee/mosquitto/log:/mosquitto/log
+    networks:
+      - my-network
+    restart: always
+
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    depends_on:
+      - mosquitto
+    image: koenkk/zigbee2mqtt
+    volumes:
+      - ${HOME}/homeassistant/zigbee/zigbee2mqtt/zigbee2mqtt-data:/app/data
+      - /run/udev:/run/udev:ro
+    ports:
+      - "8124:8124"
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    restart: always
+    privileged: true
+    networks:
+      - my-network
+
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant
+    volumes:
+      - ${HOME}/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8123:8123"
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers

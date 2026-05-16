@@ -9,6 +9,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 - [`monitoring/`](./monitoring) — Portainer for now. Later: Loki, Prometheus and Grafana.
 - [`media/`](./media) — Jellyfin (media server) + qBittorrent (torrent client).
 - [`remote/`](./remote) — Self-hosted RustDesk (remote access server).
+- [`home-automation/`](./home-automation) — Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker).
 
 ## Shared network (`all_dockers`)
 
@@ -72,4 +73,4 @@ cp .env.example .env
 2. `postgres` — database for any service that needs it.
 3. `nginx` — reverse proxy to expose the rest.
 4. `monitoring` — observability and Docker management.
-5. `media` / `remote` — application stacks.
+5. `media` / `remote` / `home-automation` — application stacks.
