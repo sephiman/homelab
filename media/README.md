@@ -27,20 +27,28 @@ See the [root README](../README.md#shared-network-all_dockers) for details. Run 
 
 ## Bind mounts
 
-Absolute paths on the Linux host running the homelab (no folders are created in this repo):
+Service config lives under the home directory of whoever runs Docker (`${HOME}` is interpolated by Compose at parse time). The library itself lives on an external mount point (`/mnt/media`), independent of any user.
 
 ### Jellyfin
 
-- `/home/juanjo/docker/jellyfin/config` → `/config` — config, users, metadata, DB.
-- `/home/juanjo/docker/jellyfin/cache`  → `/cache`  — transcodes and thumbnails. Safe to delete.
-- `/mnt/media`                          → `/media`  — media library (read).
+- `${HOME}/jellyfin/config` → `/config` — config, users, metadata, DB.
+- `${HOME}/jellyfin/cache`  → `/cache`  — transcodes and thumbnails. Safe to delete.
+- `/mnt/media`              → `/media`  — media library (read).
 
 ### qBittorrent
 
-- `/home/juanjo/docker/qbittorrent/config` → `/config`    — settings, torrent DB, categories.
-- `/mnt/media/downloads`                   → `/downloads` — download destination (subfolder of the library).
+- `${HOME}/qbittorrent/config` → `/config`    — settings, torrent DB, categories.
+- `/mnt/media/downloads`       → `/downloads` — download destination (subfolder of the library).
 
 > Both share `/mnt/media`: qBittorrent writes into `/mnt/media/downloads`, Jellyfin reads all of `/mnt/media`. New downloads appear in Jellyfin after a *Scan Library* (manual or scheduled). Make sure the paths exist and that `PUID=1000`/`PGID=1000` has permissions on them.
+>
+> Create the host folders before the first `up` so Docker doesn't create them owned by root:
+>
+> ```bash
+> mkdir -p "$HOME/jellyfin/config" "$HOME/jellyfin/cache" "$HOME/qbittorrent/config"
+> sudo mkdir -p /mnt/media/downloads
+> sudo chown -R 1000:1000 /mnt/media
+> ```
 
 ## Environment variables (qBittorrent)
 

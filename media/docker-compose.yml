@@ -5,8 +5,8 @@ services:
     ports:
       - "8096:8096"
     volumes:
-      - /home/juanjo/docker/jellyfin/config:/config
-      - /home/juanjo/docker/jellyfin/cache:/cache
+      - ${HOME}/jellyfin/config:/config
+      - ${HOME}/jellyfin/cache:/cache
       - /mnt/media:/media
     restart: 'unless-stopped'
     networks:
@@ -21,7 +21,7 @@ services:
       - TZ=Europe/Amsterdam
       - WEBUI_PORT=8881
     volumes:
-      - /home/juanjo/docker/qbittorrent/config:/config
+      - ${HOME}/qbittorrent/config:/config
       - /mnt/media/downloads:/downloads
     ports:
       - "8881:8881"
