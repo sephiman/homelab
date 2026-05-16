@@ -1,0 +1,9 @@
+.idea/
+.vscode/
+
+# Secretos por stack
+**/.env
+
+# Datos persistentes (bind mounts)
+nginx/data/
+nginx/letsencrypt/

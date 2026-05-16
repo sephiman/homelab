@@ -1,0 +1,31 @@
+services:
+  rustdesk-hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbs
+    command: hbbs -r rustdesk.example.com:21117
+    volumes:
+      - /home/juanjo/docker/rustdesk/hbbs:/root
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  rustdesk-hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbr
+    command: hbbr
+    volumes:
+      - /home/juanjo/docker/rustdesk/hbbr:/root
+    ports:
+      - "21117:21117"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers

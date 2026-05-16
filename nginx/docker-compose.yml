@@ -1,0 +1,22 @@
+services:
+  app:
+    image: docker.io/jc21/nginx-proxy-manager
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - my-network
+      - custom_bridge
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers
+  custom_bridge:
+    driver: bridge

@@ -1,0 +1,37 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    ports:
+      - "8096:8096"
+    volumes:
+      - /home/juanjo/docker/jellyfin/config:/config
+      - /home/juanjo/docker/jellyfin/cache:/cache
+      - /mnt/media:/media
+    restart: 'unless-stopped'
+    networks:
+      - my-network
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+      - WEBUI_PORT=8881
+    volumes:
+      - /home/juanjo/docker/qbittorrent/config:/config
+      - /mnt/media/downloads:/downloads
+    ports:
+      - "8881:8881"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers
