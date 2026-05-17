@@ -3,7 +3,7 @@
   "title": "Homelab — Crypto Signal Sweep",
   "tags": ["homelab", "crypto-signal-sweep", "trading"],
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "refresh": "30s",
   "time": {"from": "now-6h", "to": "now"},
@@ -312,6 +312,49 @@
         }
       ],
       "fieldConfig": {"defaults": {"unit": "percentunit"}}
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Pair pipeline duration p50 / p95 by TF",
+      "description": "End-to-end per-pair pipeline latency (fetch + analyze + save + alert), split by timeframe.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 47},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (tf, le) (rate(csweep_pair_pipeline_duration_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p50 {{tf}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (tf, le) (rate(csweep_pair_pipeline_duration_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p95 {{tf}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Stale candles / min by outcome",
+      "description": "Pair pipelines that hit a stale-candle path and either recovered or were abandoned.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 47},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (tf, outcome) (rate(csweep_pair_stale_total{instance=~\"$instance\"}[5m])) * 60",
+          "legendFormat": "{{tf}} / {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal"}}
+        }
+      }
     }
   ]
 }
