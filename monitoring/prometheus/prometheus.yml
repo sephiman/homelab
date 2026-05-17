@@ -10,21 +10,30 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: node-exporter
-    static_configs:
-      - targets: ["node-exporter:9100"]
-
-  - job_name: cadvisor
-    static_configs:
-      - targets: ["cadvisor:8080"]
-
-  - job_name: mosquitto
-    static_configs:
-      - targets: ["mosquitto-exporter:9234"]
+  # Auto-discovery: any container on `all_dockers` with these labels gets scraped.
+  #   prometheus.scrape=true   (required)
+  #   prometheus.port=<port>   (required — internal port that serves /metrics)
+  - job_name: docker
+    docker_sd_configs:
+      - host: tcp://docker-socket-proxy:2375
+        refresh_interval: 15s
+        filters:
+          - name: label
+            values: ["prometheus.scrape=true"]
+    relabel_configs:
+      - source_labels: [__meta_docker_network_name]
+        regex: all_dockers
+        action: keep
+      - source_labels: [__address__, __meta_docker_container_label_prometheus_port]
+        regex: '([^:]+)(?::\d+)?;(\d+)'
+        replacement: '$1:$2'
+        target_label: __address__
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: instance
 
   - job_name: homeassistant
     metrics_path: /api/prometheus
-    scheme: http
     bearer_token_file: /etc/prometheus/ha_token
     static_configs:
       - targets: ["homeassistant:8123"]

@@ -26,6 +26,27 @@ services:
     ports:
       - "9090:9090"
     restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
+    networks:
+      - my-network
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: docker-socket-proxy
+    environment:
+      - CONTAINERS=1
+      - NETWORKS=1
+      - SERVICES=0
+      - TASKS=0
+      - NODES=0
+      - SWARM=0
+      - SYSTEM=0
+      - INFO=1
+      - POST=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
     networks:
       - my-network
 
@@ -101,6 +122,9 @@ services:
       - /:/rootfs:ro
     pid: host
     restart: unless-stopped
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "9100"
     networks:
       - my-network
 
@@ -117,6 +141,9 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     restart: unless-stopped
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "8080"
     networks:
       - my-network
 
@@ -125,6 +152,9 @@ services:
     container_name: mosquitto-exporter
     command: ["--endpoint=tcp://mqtt:1883"]
     restart: unless-stopped
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "9234"
     networks:
       - my-network
 

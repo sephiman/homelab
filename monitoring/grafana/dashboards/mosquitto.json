@@ -1,0 +1,199 @@
+{
+  "uid": "homelab-mosquitto",
+  "title": "Homelab — Mosquitto",
+  "tags": ["homelab", "mqtt", "mosquitto"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "annotations": {"list": []},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Connected clients",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "mosquitto_connected_clients"}],
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Subscriptions",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "mosquitto_subscriptions"}],
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Retained messages",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "mosquitto_retained_messages"}],
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Broker uptime",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "mosquitto_uptime"}],
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "options": {"colorMode": "none"}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Clients",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "mosquitto_connected_clients", "legendFormat": "connected"},
+        {"refId": "B", "expr": "mosquitto_active_clients", "legendFormat": "active"},
+        {"refId": "C", "expr": "mosquitto_inactive_clients", "legendFormat": "inactive"},
+        {"refId": "D", "expr": "mosquitto_maximum_clients", "legendFormat": "max ever"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Subscriptions & retained",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "mosquitto_subscriptions", "legendFormat": "subscriptions"},
+        {"refId": "B", "expr": "mosquitto_retained_messages", "legendFormat": "retained"},
+        {"refId": "C", "expr": "mosquitto_messages_stored", "legendFormat": "stored"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Message rate (msg/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "rate(mosquitto_messages_received[5m])", "legendFormat": "received"},
+        {"refId": "B", "expr": "-rate(mosquitto_messages_sent[5m])", "legendFormat": "sent"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mps",
+          "custom": {"drawStyle": "line", "fillOpacity": 20}
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Byte rate",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "rate(mosquitto_bytes_received[5m])", "legendFormat": "rx"},
+        {"refId": "B", "expr": "-rate(mosquitto_bytes_sent[5m])", "legendFormat": "tx"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {"drawStyle": "line", "fillOpacity": 20}
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "PUBLISH messages",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "rate(mosquitto_publish_messages_received[5m])", "legendFormat": "received"},
+        {"refId": "B", "expr": "rate(mosquitto_publish_messages_sent[5m])", "legendFormat": "sent"},
+        {"refId": "C", "expr": "rate(mosquitto_publish_messages_dropped[5m])", "legendFormat": "dropped"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mps",
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "dropped"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Load average (msg/s, broker-side)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "mosquitto_load_messages_received_1min", "legendFormat": "rx 1m"},
+        {"refId": "B", "expr": "mosquitto_load_messages_received_5min", "legendFormat": "rx 5m"},
+        {"refId": "C", "expr": "mosquitto_load_messages_received_15min", "legendFormat": "rx 15m"},
+        {"refId": "D", "expr": "mosquitto_load_messages_sent_1min", "legendFormat": "tx 1m"},
+        {"refId": "E", "expr": "mosquitto_load_messages_sent_5min", "legendFormat": "tx 5m"},
+        {"refId": "F", "expr": "mosquitto_load_messages_sent_15min", "legendFormat": "tx 15m"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "mps"}}
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Dropped (last 1h)",
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "increase(mosquitto_publish_messages_dropped[1h])"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 100}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Bytes received (1h)",
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "increase(mosquitto_bytes_received[1h])"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Bytes sent (1h)",
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "increase(mosquitto_bytes_sent[1h])"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    }
+  ]
+}

@@ -4,18 +4,42 @@ Homelab management + observability stack (Phase 1: full coverage for the `home-a
 
 ## Services
 
-| Service              | Container             | Host port      | Purpose                                                                |
-|----------------------|-----------------------|----------------|------------------------------------------------------------------------|
-| portainer            | `portainer`           | `9000`, `9443` | Docker UI                                                              |
-| grafana              | `grafana`             | `3000`         | Dashboards + unified alerting (Telegram)                               |
-| prometheus           | `prometheus`          | `9090`         | Metrics store, 15d retention                                           |
-| loki                 | `loki`                | `3100`         | Log store, 30d retention                                               |
-| alloy                | `alloy`               | `12345`        | Grafana Alloy — ships every container's logs to Loki                   |
-| node-exporter        | `node-exporter`       | —              | Host CPU/mem/disk/net metrics                                          |
-| cadvisor             | `cadvisor`            | —              | Per-container metrics                                                  |
-| mosquitto-exporter   | `mosquitto-exporter`  | —              | MQTT broker metrics (clients, messages/sec)                            |
+| Service              | Container               | Host port      | Purpose                                                                |
+|----------------------|-------------------------|----------------|------------------------------------------------------------------------|
+| portainer            | `portainer`             | `9000`, `9443` | Docker UI                                                              |
+| grafana              | `grafana`               | `3000`         | Dashboards + unified alerting (Telegram)                               |
+| prometheus           | `prometheus`            | `9090`         | Metrics store, 15d retention                                           |
+| docker-socket-proxy  | `docker-socket-proxy`   | —              | Read-only Docker API for Prometheus service discovery                  |
+| loki                 | `loki`                  | `3100`         | Log store, 30d retention                                               |
+| alloy                | `alloy`                 | `12345`        | Grafana Alloy — ships every container's logs to Loki                   |
+| node-exporter        | `node-exporter`         | —              | Host CPU/mem/disk/net metrics                                          |
+| cadvisor             | `cadvisor`              | —              | Per-container metrics                                                  |
+| mosquitto-exporter   | `mosquitto-exporter`    | —              | MQTT broker metrics (clients, messages/sec)                            |
 
 Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names.
+
+## Auto-discovery: how to add a new scrape target
+
+Add two labels to your container and Prometheus picks it up within ~15s — no edits to `prometheus.yml`.
+
+```yaml
+services:
+  my-app:
+    # ...your service definition...
+    networks:
+      - my-network
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "8000"   # the internal port serving /metrics
+```
+
+Verify at http://localhost:9090/targets. Each target is labelled with `instance=<container-name>`, so PromQL like `up{instance="my-app"} == 0` works directly.
+
+Constraints:
+- The app must serve metrics at `/metrics` (Prometheus default).
+- The container must be attached to the `all_dockers` network (it almost certainly already is).
+
+Discovery uses a read-only [Docker socket proxy](https://github.com/Tecnativa/docker-socket-proxy) sidecar — Prometheus never sees `/var/run/docker.sock` directly.
 
 ## What this monitors
 
@@ -65,13 +89,14 @@ First boot:
 
 ## Dashboards
 
-Three dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
+Four dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
 
 | File                       | Dashboard                                                                          |
 |----------------------------|------------------------------------------------------------------------------------|
 | `host-overview.json`       | Host CPU/memory/disk/network/load + filesystem table (node-exporter)               |
 | `containers-overview.json` | Per-container CPU/memory/network, restart count, snapshot table (cAdvisor)         |
 | `container-logs.json`      | Loki log explorer with container/regex/level filters + error & warning counters    |
+| `mosquitto.json`           | MQTT broker — clients, subscriptions, msg/byte rate, dropped, load avg             |
 
 Edit them in the UI freely (`allowUiUpdates: true`); to make changes survive a restart, export the JSON and overwrite the file.
 

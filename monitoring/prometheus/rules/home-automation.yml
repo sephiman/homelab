@@ -12,7 +12,7 @@ groups:
           description: "Prometheus has failed to scrape Home Assistant for 5 minutes."
 
       - alert: MosquittoDown
-        expr: up{job="mosquitto"} == 0
+        expr: up{instance="mosquitto-exporter"} == 0
         for: 5m
         labels:
           severity: critical
