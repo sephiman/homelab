@@ -134,7 +134,6 @@ services:
     privileged: true
     command:
       - "--housekeeping_interval=30s"
-      - "--global_housekeeping_interval=1m"
       - "--docker_only=true"
       - "--store_container_labels=false"
       - "--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service"
