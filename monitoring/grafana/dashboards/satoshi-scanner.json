@@ -1,0 +1,437 @@
+{
+  "uid": "homelab-satoshi-scanner",
+  "title": "Homelab — Satoshi Scanner",
+  "tags": ["homelab", "satoshi-scanner", "bitcoin"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(satoshi_addresses_generated_total, instance)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Scanner alive (5m)",
+      "description": "1 if the address-generation counter is incrementing.",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "count(rate(satoshi_addresses_generated_total{instance=~\"$instance\"}[5m]) > 0)"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Scan rate (addr/s)",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(satoshi_addresses_generated_total{instance=~\"$instance\"}[5m]))"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "decimals": 2}},
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Addresses scanned (24h)",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(satoshi_addresses_generated_total{instance=~\"$instance\"}[24h]))"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Wallets found (total)",
+      "description": "Cumulative wallets discovered with a non-zero balance. Expect 0 forever (universe-heat-death-improbable otherwise).",
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(satoshi_wallets_found_total{instance=~\"$instance\"})"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "super-light-yellow", "value": 1}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Rate-limited?",
+      "description": "1 = currently in Blockstream cooldown window.",
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "max(satoshi_blockstream_cooldown_active{instance=~\"$instance\"})"}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "OK", "color": "green"}, "1": {"text": "COOLING DOWN", "color": "red"}}}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Telegram errors (1h)",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(satoshi_telegram_send_errors_total{instance=~\"$instance\"}[1h]))"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Scan rate (addresses/sec)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(satoshi_addresses_generated_total{instance=~\"$instance\"}[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Checks by outcome (per sec)",
+      "description": "Hits → DB pre-filter says \"funded\" (or live-mode Blockstream returns >0). Zero → no balance. Always-zero is the boring expected world.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (rate(satoshi_addresses_checked_total{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"drawStyle": "line", "fillOpacity": 20, "stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Blockstream — request latency",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (instance, le) (rate(satoshi_blockstream_request_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p50 {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(satoshi_blockstream_request_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p95 {{instance}}"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (instance, le) (rate(satoshi_blockstream_request_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p99 {{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Blockstream — requests by outcome (per min)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(satoshi_blockstream_requests_total{instance=~\"$instance\"}[5m])) * 60",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Blockstream — current backoff window",
+      "description": "Seconds the scanner will wait before retrying after a 429. Doubles on each rate-limit, resets to 5s on success.",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "satoshi_blockstream_backoff_seconds{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Cooldown state (0 = OK, 1 = throttled)",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "satoshi_blockstream_cooldown_active{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": {"drawStyle": "line", "fillOpacity": 40, "lineInterpolation": "stepAfter"}
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Database mode",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26},
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "funded_addresses rows",
+      "description": "Estimated row count (pg_class.reltuples). Sampled at startup and after dump load.",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "max(satoshi_db_funded_addresses_rows{instance=~\"$instance\"})"}],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "DB hits (24h)",
+      "description": "Count of addresses that matched the funded_addresses table. Any hit triggers a Blockstream balance verification.",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(satoshi_db_lookups_total{instance=~\"$instance\",result=\"hit\"}[24h]))"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "super-light-yellow", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "DB lookup p95",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(satoshi_db_lookup_seconds_bucket{instance=~\"$instance\"}[5m])))"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "DB lookups/sec",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(satoshi_db_lookups_total{instance=~\"$instance\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "decimals": 2}}
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "DB lookup latency",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (instance, le) (rate(satoshi_db_lookup_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p50 {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(satoshi_db_lookup_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p95 {{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "DB lookups by result (per sec)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (rate(satoshi_db_lookups_total{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"drawStyle": "line", "fillOpacity": 20, "stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Telegram & process",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 39},
+      "collapsed": false
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Telegram messages (per min)",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 40},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(satoshi_telegram_sent_total{instance=~\"$instance\"}[5m]) * 60",
+          "legendFormat": "sent {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(satoshi_telegram_send_errors_total{instance=~\"$instance\"}[5m]) * 60",
+          "legendFormat": "errors {{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Seconds since last check",
+      "description": "Lag between now and the most recent completed address scan. Sustained high values mean the loop is stuck.",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 40},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - satoshi_last_check_timestamp{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 43,
+      "type": "timeseries",
+      "title": "Process — RSS memory",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 47},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{instance=~\"$instance\",job=\"docker\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Process — CPU",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 47},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(process_cpu_seconds_total{instance=~\"$instance\",job=\"docker\"}[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}}
+    }
+  ]
+}
