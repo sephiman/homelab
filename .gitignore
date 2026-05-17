@@ -7,3 +7,6 @@
 # Datos persistentes (bind mounts)
 nginx/data/
 nginx/letsencrypt/
+
+# Tokens montados en contenedores
+monitoring/prometheus/ha_token

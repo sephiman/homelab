@@ -1,0 +1,45 @@
+groups:
+  - name: home-automation
+    interval: 30s
+    rules:
+      - alert: HomeAssistantDown
+        expr: up{job="homeassistant"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Home Assistant is unreachable"
+          description: "Prometheus has failed to scrape Home Assistant for 5 minutes."
+
+      - alert: MosquittoDown
+        expr: up{job="mosquitto"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mosquitto MQTT broker is unreachable"
+          description: "mosquitto-exporter cannot reach the broker for 5 minutes."
+
+      - alert: HostHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory usage above 90% for 10m"
+
+      - alert: HostHighDisk
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Filesystem {{ $labels.mountpoint }} above 90% used"
+
+      - alert: ContainerRestartingLoop
+        expr: increase(container_start_time_seconds[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} restarted >3 times in 15m"

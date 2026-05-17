@@ -1,47 +1,107 @@
 # Monitoring
 
-Homelab management and (eventually) observability stack.
+Homelab management + observability stack (Phase 1: full coverage for the `home-automation` stack).
 
-## Current state
+## Services
 
-| Service   | Container   | Host port      | Access                                         |
-|-----------|-------------|----------------|------------------------------------------------|
-| portainer | `portainer` | `9000`, `9443` | http://localhost:9000 · https://localhost:9443 |
+| Service              | Container             | Host port      | Purpose                                                                |
+|----------------------|-----------------------|----------------|------------------------------------------------------------------------|
+| portainer            | `portainer`           | `9000`, `9443` | Docker UI                                                              |
+| grafana              | `grafana`             | `3000`         | Dashboards + unified alerting (Telegram)                               |
+| prometheus           | `prometheus`          | `9090`         | Metrics store, 15d retention                                           |
+| loki                 | `loki`                | `3100`         | Log store, 30d retention                                               |
+| alloy                | `alloy`               | `12345`        | Grafana Alloy — ships every container's logs to Loki                   |
+| node-exporter        | `node-exporter`       | —              | Host CPU/mem/disk/net metrics                                          |
+| cadvisor             | `cadvisor`            | —              | Per-container metrics                                                  |
+| mosquitto-exporter   | `mosquitto-exporter`  | —              | MQTT broker metrics (clients, messages/sec)                            |
 
-[Portainer CE](https://www.portainer.io/) provides a UI to manage Docker containers, images, volumes and networks.
+Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names.
 
-## Prerequisite
+## What this monitors
 
-The shared network must exist before bringing the stack up:
+- **Host**: CPU, memory, disk, network, filesystems (node-exporter).
+- **All containers**: CPU/memory/IO/restart counts (cAdvisor).
+- **All container logs**: shipped by Alloy via Docker service discovery — labels include `container`, `compose_project`, `compose_service`, `stream`.
+- **Home Assistant**: native Prometheus integration (entity states, automations, recorder, system stats).
+- **Mosquitto / MQTT**: messages in/out, connected clients, retained messages.
 
-```bash
-docker network create all_dockers
+## Prerequisites
+
+1. Shared network must exist (`docker network create all_dockers`). See [root README](../README.md#shared-network-all_dockers).
+2. Copy `.env.example` → `.env` and set `GF_ADMIN_PASSWORD` (and Telegram credentials when ready for alerts).
+3. Enable Home Assistant's Prometheus integration (see below) and drop the long-lived token into `prometheus/ha_token`.
+
+### Enable Home Assistant Prometheus integration
+
+Add to `${HOME}/homeassistant/config/configuration.yaml`:
+
+```yaml
+prometheus:
+  namespace: hass
 ```
 
-See the [root README](../README.md#shared-network-all_dockers) for details. Run this once per host.
+Restart Home Assistant. Then create a long-lived access token in the HA UI (Profile → Security → Long-Lived Access Tokens) and save it:
 
-## Persistence
+```bash
+cp monitoring/prometheus/ha_token.example monitoring/prometheus/ha_token
+# edit the file and paste the token (no quotes, no trailing newline beyond one)
+```
 
-- `portainer_data` — Docker-managed named volume with Portainer's configuration, users and registered endpoints.
-
-## Docker socket
-
-`/var/run/docker.sock` is bind-mounted into the container so Portainer can talk to the daemon. This grants Portainer full control over Docker on the host: treat UI access as root access.
-
-> On Windows with Docker Desktop the socket bind works the same way (Docker Desktop exposes the Linux socket through WSL2).
+`monitoring/prometheus/ha_token` is gitignored.
 
 ## Bring it up
 
 ```bash
+cd monitoring
+cp .env.example .env   # edit secrets
 docker compose up -d
 ```
 
-On the first run Portainer asks you to create the admin user through the UI (do it within the first few minutes or the initial setup window expires).
+First boot:
 
-## Pending
+- Grafana → http://localhost:3000 (login with `GF_ADMIN_USER` / `GF_ADMIN_PASSWORD`).
+- Datasources (Prometheus, Loki) are provisioned automatically.
+- Portainer → http://localhost:9000 (create admin user within the first few minutes).
 
-Add to this stack later, no rush:
+## Import dashboards
 
-- **Loki** — log aggregation.
-- **Prometheus** — metrics.
-- **Grafana** — dashboards on top of Loki + Prometheus.
+In Grafana → *Dashboards → New → Import* and paste these IDs (all use the auto-provisioned Prometheus/Loki datasources):
+
+| ID    | Dashboard                                  |
+|-------|--------------------------------------------|
+| 1860  | Node Exporter Full                         |
+| 14282 | cAdvisor compute resources                 |
+| 13639 | Logs / app                                 |
+| 15239 | Home Assistant                             |
+| 11352 | Mosquitto                                  |
+
+After you've validated which ones you actually use, drop their JSON into `grafana/dashboards/` and they'll be provisioned on every restart (the file provider is already configured under `Homelab/`).
+
+## Alerts → Telegram
+
+1. Create a Telegram bot via `@BotFather`, save the token in `.env` as `TELEGRAM_BOT_TOKEN`.
+2. Get your chat ID from `@userinfobot`, save as `TELEGRAM_ALERT_CHAT_ID`.
+3. Restart the Grafana container (`docker compose restart grafana`).
+4. In Grafana → *Alerting → Contact points → New*, type Telegram. Reference the env vars as `$__env{TELEGRAM_BOT_TOKEN}` and `$__env{TELEGRAM_ALERT_CHAT_ID}`.
+5. Set this contact point as the default in *Notification policies*.
+
+Baseline alert rules are pre-loaded from `prometheus/rules/home-automation.yml`:
+`HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
+Grafana will pick them up automatically from the Prometheus datasource (Alerting → Alert rules → Prometheus-managed).
+
+## Persistence
+
+Docker-managed named volumes (survive `docker compose down`):
+
+- `portainer_data` — Portainer config.
+- `prometheus_data` — TSDB (~hundreds of MB/month).
+- `loki_data` — logs + indexes.
+- `alloy_data` — Alloy WAL / positions.
+- `grafana_data` — Grafana DB (users, alerts, dashboards-in-DB).
+
+## Security notes
+
+- `alloy`, `cadvisor` and `portainer` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
+- Only Grafana should be exposed externally (through NPM, with HTTPS). Leave Prom/Loki/Alloy/exporters internal.
+- Pin image tags (already done) — Loki/Prom schemas can break on `:latest`.
+
