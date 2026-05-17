@@ -137,6 +137,7 @@ services:
       - "--docker_only=true"
       - "--store_container_labels=false"
       - "--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service"
+      - "--disable_metrics=disk,diskIO,percpu,perf_event,app"
     devices:
       - /dev/kmsg
     volumes:
