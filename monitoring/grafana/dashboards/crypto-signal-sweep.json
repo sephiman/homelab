@@ -1,0 +1,317 @@
+{
+  "uid": "homelab-csweep",
+  "title": "Homelab — Crypto Signal Sweep",
+  "tags": ["homelab", "crypto-signal-sweep", "trading"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Bot",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(csweep_loop_iterations_total, instance)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Bots alive (5m)",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "count(rate(csweep_loop_iterations_total{instance=~\"$instance\"}[5m]) > 0)"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "green", "value": 4}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Signals (24h)",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(csweep_signals_emitted_total{instance=~\"$instance\"}[24h]))"}],
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Telegram errors (1h)",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(csweep_telegram_send_errors_total{instance=~\"$instance\"}[1h]))"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "DB errors (1h)",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(increase(csweep_db_write_errors_total{instance=~\"$instance\"}[1h]))"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Loop iterations / sec",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(csweep_loop_iterations_total{instance=~\"$instance\"}[5m])",
+          "legendFormat": "{{instance}} ({{profile}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Loop duration (p50 / p95)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (instance, le) (rate(csweep_loop_duration_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p50 {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(csweep_loop_duration_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p95 {{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Signals/min by direction",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (direction) (rate(csweep_signals_emitted_total{instance=~\"$instance\"}[5m])) * 60",
+          "legendFormat": "{{direction}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Exchange call latency p95",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (exchange, endpoint, le) (rate(csweep_exchange_request_seconds_bucket{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "{{exchange}} / {{endpoint}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Candle freshness — lag since last fetched candle",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 20},
+      "description": "Seconds since the most recent candle for each (exchange, symbol, timeframe). If lag exceeds the timeframe's interval by 2-3× the data feed is stale.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - csweep_last_candle_timestamp{instance=~\"$instance\"}",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "{{exchange}}/{{symbol}}/{{tf}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "compose_project": true,
+              "compose_service": true
+            },
+            "indexByName": {
+              "exchange": 0,
+              "symbol": 1,
+              "tf": 2,
+              "instance": 3,
+              "Value": 4
+            },
+            "renameByName": {
+              "exchange": "Exchange",
+              "symbol": "Symbol",
+              "tf": "TF",
+              "instance": "Bot",
+              "Value": "Lag (s)"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {"fields": {}, "sort": [{"field": "Lag (s)", "desc": true}]}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Lag (s)"},
+            "properties": [
+              {"id": "unit", "value": "s"},
+              {
+                "id": "custom.cellOptions",
+                "value": {"type": "color-background", "mode": "gradient"}
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 300},
+                    {"color": "orange", "value": 900},
+                    {"color": "red", "value": 1800}
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Exchange errors / min by code",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (exchange, code) (rate(csweep_exchange_errors_total{instance=~\"$instance\"}[5m])) * 60",
+          "legendFormat": "{{exchange}} / {{code}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Side errors / min (Telegram + DB)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(csweep_telegram_send_errors_total{instance=~\"$instance\"}[5m]) * 60",
+          "legendFormat": "telegram {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (db) (rate(csweep_db_write_errors_total{instance=~\"$instance\"}[5m])) * 60",
+          "legendFormat": "db {{db}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Process — RSS memory",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 40},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{instance=~\"$instance\",job=\"docker\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Process — CPU",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 40},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(process_cpu_seconds_total{instance=~\"$instance\",job=\"docker\"}[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}}
+    }
+  ]
+}

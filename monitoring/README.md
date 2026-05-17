@@ -48,6 +48,7 @@ Discovery uses a read-only [Docker socket proxy](https://github.com/Tecnativa/do
 - **All container logs**: shipped by Alloy via Docker service discovery — labels include `container`, `compose_project`, `compose_service`, `stream`.
 - **Home Assistant**: native Prometheus integration (entity states, automations, recorder, system stats).
 - **Mosquitto / MQTT**: messages in/out, connected clients, retained messages.
+- **`crypto-signal-sweep`** (optional): a personal Python trading bot in a separate repo. The stack picks up its metrics if it's running; nothing here depends on it.
 
 ## Prerequisites
 
@@ -89,14 +90,17 @@ First boot:
 
 ## Dashboards
 
-Four dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
+Five dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
 
-| File                       | Dashboard                                                                          |
-|----------------------------|------------------------------------------------------------------------------------|
-| `host-overview.json`       | Host CPU/memory/disk/network/load + filesystem table (node-exporter)               |
-| `containers-overview.json` | Per-container CPU/memory/network, restart count, snapshot table (cAdvisor)         |
-| `container-logs.json`      | Loki log explorer with container/regex/level filters + error & warning counters    |
-| `mosquitto.json`           | MQTT broker — clients, subscriptions, msg/byte rate, dropped, load avg             |
+| File                          | Dashboard                                                                                |
+|-------------------------------|------------------------------------------------------------------------------------------|
+| `host-overview.json`          | Host CPU/memory/disk/network/load + filesystem table (node-exporter)                     |
+| `containers-overview.json`    | Per-container CPU/memory/network, restart count, snapshot table (cAdvisor)               |
+| `container-logs.json`         | Loki log explorer with container/regex/level filters + error & warning counters          |
+| `mosquitto.json`              | MQTT broker — clients, subscriptions, msg/byte rate, dropped, load avg                   |
+| `crypto-signal-sweep.json`    | Trading bots — candle freshness, signals, loop health, exchange latency/errors, side errors |
+
+> `crypto-signal-sweep` is a personal Python trading bot living in a separate repo. This stack only consumes its `/metrics` endpoint via the auto-discovery convention above — if the bot isn't running, the dashboard simply shows "No data" and the rest of the stack is unaffected. Treat it as an example of how any future app plugs in.
 
 Edit them in the UI freely (`allowUiUpdates: true`); to make changes survive a restart, export the JSON and overwrite the file.
 
