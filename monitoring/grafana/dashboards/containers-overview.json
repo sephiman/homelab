@@ -1,0 +1,202 @@
+{
+  "uid": "homelab-containers",
+  "title": "Homelab — Containers",
+  "tags": ["homelab", "containers"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "annotations": {"list": []},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Running containers",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "count(count by (name) (container_last_seen{name!=\"\"}))"}
+      ],
+      "options": {"colorMode": "value"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total container CPU",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])) * 100"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Total container memory",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum(container_memory_usage_bytes{name!=\"\"})"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Restarts (1h)",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum(changes(container_start_time_seconds{name!=\"\"}[1h]))"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU per container",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]) * 100",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean", "max"]}}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory per container",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "container_memory_usage_bytes{name!=\"\"}",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"drawStyle": "line", "fillOpacity": 10}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean", "max"]}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Network RX per container",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 22},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[5m]))",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "Bps"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Network TX per container",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 22},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[5m]))",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "Bps"}}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Containers — current snapshot",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 31},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "CPU",
+          "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]) * 100",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "MEM",
+          "expr": "container_memory_usage_bytes{name!=\"\"}",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "refId": "RESTARTS",
+          "expr": "changes(container_start_time_seconds{name!=\"\"}[1h])",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {"id": "joinByField", "options": {"byField": "name", "mode": "outer"}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "__name__": true,
+              "id": true,
+              "image": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {
+              "name": "Container",
+              "Value #CPU": "CPU %",
+              "Value #MEM": "Memory",
+              "Value #RESTARTS": "Restarts (1h)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "CPU %"}, "properties": [{"id": "unit", "value": "percent"}]},
+          {"matcher": {"id": "byName", "options": "Memory"}, "properties": [{"id": "unit", "value": "bytes"}]}
+        ]
+      }
+    }
+  ]
+}

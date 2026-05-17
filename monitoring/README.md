@@ -63,19 +63,30 @@ First boot:
 - Datasources (Prometheus, Loki) are provisioned automatically.
 - Portainer → http://localhost:9000 (create admin user within the first few minutes).
 
-## Import dashboards
+## Dashboards
 
-In Grafana → *Dashboards → New → Import* and paste these IDs (all use the auto-provisioned Prometheus/Loki datasources):
+Three dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
 
-| ID    | Dashboard                                  |
-|-------|--------------------------------------------|
-| 1860  | Node Exporter Full                         |
-| 14282 | cAdvisor compute resources                 |
-| 13639 | Logs / app                                 |
-| 15239 | Home Assistant                             |
-| 11352 | Mosquitto                                  |
+| File                       | Dashboard                                                                          |
+|----------------------------|------------------------------------------------------------------------------------|
+| `host-overview.json`       | Host CPU/memory/disk/network/load + filesystem table (node-exporter)               |
+| `containers-overview.json` | Per-container CPU/memory/network, restart count, snapshot table (cAdvisor)         |
+| `container-logs.json`      | Loki log explorer with container/regex/level filters + error & warning counters    |
 
-After you've validated which ones you actually use, drop their JSON into `grafana/dashboards/` and they'll be provisioned on every restart (the file provider is already configured under `Homelab/`).
+Edit them in the UI freely (`allowUiUpdates: true`); to make changes survive a restart, export the JSON and overwrite the file.
+
+### Add more dashboards from grafana.com
+
+If you want deeper community dashboards, import them via *Dashboards → New → Import* with these IDs:
+
+| ID    | Dashboard                  |
+|-------|----------------------------|
+| 1860  | Node Exporter Full         |
+| 14282 | cAdvisor compute resources |
+| 15239 | Home Assistant             |
+| 11352 | Mosquitto                  |
+
+Drop their JSON into `grafana/dashboards/` to make the ones you keep permanent.
 
 ## Alerts → Telegram
 

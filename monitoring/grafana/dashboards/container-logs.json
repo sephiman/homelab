@@ -1,0 +1,157 @@
+{
+  "uid": "homelab-logs",
+  "title": "Homelab — Container logs",
+  "tags": ["homelab", "logs"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "query": {"label": "container", "stream": "", "type": 1},
+        "definition": "label_values(container)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "search",
+        "label": "Search (regex)",
+        "type": "textbox",
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "level",
+        "label": "Level",
+        "type": "custom",
+        "query": ".+,error|err|fatal|panic,warn|warning,info,debug",
+        "current": {"text": "All", "value": ".+"},
+        "options": [
+          {"text": "All", "value": ".+", "selected": true},
+          {"text": "Error+", "value": "error|err|fatal|panic"},
+          {"text": "Warn+", "value": "warn|warning"},
+          {"text": "Info", "value": "info"},
+          {"text": "Debug", "value": "debug"}
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log lines per minute",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (container) (count_over_time({container=~\"$container\"} |~ \"(?i)$search\" [1m]))",
+          "legendFormat": "{{container}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "fillOpacity": 80, "stacking": {"mode": "normal"}}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["sum", "lastNotNull"]}}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Errors (window)",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"$container\"} |~ \"(?i)error|err |fatal|panic|exception\" [$__range]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 50}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Warnings (window)",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"$container\"} |~ \"(?i)warn|warning\" [$__range]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total lines (window)",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"$container\"} |~ \"(?i)$search\" [$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Logs",
+      "gridPos": {"h": 22, "w": 24, "x": 0, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{container=~\"$container\"} |~ \"(?i)$search\" |~ \"(?i)$level\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}

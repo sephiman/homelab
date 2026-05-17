@@ -76,6 +76,7 @@ services:
       - TELEGRAM_ALERT_CHAT_ID=${TELEGRAM_ALERT_CHAT_ID:-}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "3000:3000"
