@@ -51,7 +51,7 @@ services:
       - my-network
 
   loki:
-    image: grafana/loki:3.2.1
+    image: grafana/loki:3.7.2
     container_name: loki
     command: ["-config.file=/etc/loki/loki-config.yml"]
     volumes:
@@ -64,7 +64,7 @@ services:
       - my-network
 
   alloy:
-    image: grafana/alloy:v1.5.1
+    image: grafana/alloy:v1.16.1
     container_name: alloy
     command:
       - "run"
@@ -85,7 +85,7 @@ services:
       - my-network
 
   grafana:
-    image: grafana/grafana:11.3.1
+    image: grafana/grafana:13.0.1
     container_name: grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
@@ -109,13 +109,14 @@ services:
       - my-network
 
   node-exporter:
-    image: prom/node-exporter:v1.8.2
+    image: prom/node-exporter:v1.11.1
     container_name: node-exporter
     command:
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/rootfs"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      - "--no-collector.thermal_zone"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -129,7 +130,7 @@ services:
       - my-network
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    image: gcr.io/cadvisor/cadvisor:v0.57.0
     container_name: cadvisor
     privileged: true
     command:
