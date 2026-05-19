@@ -13,7 +13,7 @@ services:
       - my-network
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.11.3
     container_name: prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
