@@ -138,7 +138,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{container=~\"$container\"} |~ \"(?i)$search\" |~ \"(?i)$level\"",
+          "expr": "{container=~\"$container\"} != \"level=info\" |~ \"(?i)$search\" |~ \"(?i)$level\"",
           "queryType": "range"
         }
       ],
