@@ -76,7 +76,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=~\"$container\"} |~ \"(?i)error|err |fatal|panic|exception\" [$__range]))"
+          "expr": "sum(count_over_time({container=~\"$container\"} != \"level=info\" |~ \"(?i)error|fatal|panic|exception\" [$__range]))"
         }
       ],
       "fieldConfig": {
@@ -101,7 +101,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=~\"$container\"} |~ \"(?i)warn|warning\" [$__range]))"
+          "expr": "sum(count_over_time({container=~\"$container\"} != \"level=info\" |~ \"(?i)warn|warning\" [$__range]))"
         }
       ],
       "fieldConfig": {
