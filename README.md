@@ -1,5 +1,7 @@
 # Homelab
 
+_A [Sephilabs](https://github.com/sephiman) project._
+
 Collection of self-hosted services orchestrated with Docker Compose. Each folder is an independent stack with its own `docker-compose.yml` and README.
 
 ## Structure
@@ -74,3 +76,9 @@ cp .env.example .env
 3. `nginx` — reverse proxy to expose the rest.
 4. `monitoring` — observability and Docker management.
 5. `media` / `remote` / `home-automation` — application stacks.
+
+## License
+
+Copyright (C) 2026 Sephilabs (https://github.com/sephiman)
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](./LICENSE) file for the full text.
