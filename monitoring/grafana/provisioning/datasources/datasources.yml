@@ -15,3 +15,57 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: false
+
+  # crypto-ambush trading databases, read via the SELECT-only `grafana_ro` role
+  # (created by postgres/grafana_ro.sql). Password comes from monitoring/.env
+  # through the AMBUSH_DB_RO_PASSWORD env var on the grafana container.
+  - name: Ambush Postgres
+    uid: ambush-pg
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgresdb:5432
+    user: grafana_ro
+    secureJsonData:
+      password: $AMBUSH_DB_RO_PASSWORD
+    jsonData:
+      database: crypto_ambush
+      sslmode: disable
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+    editable: false
+
+  - name: Ambush Postgres (1h)
+    uid: ambush-pg-1h
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgresdb:5432
+    user: grafana_ro
+    secureJsonData:
+      password: $AMBUSH_DB_RO_PASSWORD
+    jsonData:
+      database: crypto_ambush_1h
+      sslmode: disable
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+    editable: false
+
+  - name: Ambush Postgres (signals)
+    uid: ambush-pg-signals
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgresdb:5432
+    user: grafana_ro
+    secureJsonData:
+      password: $AMBUSH_DB_RO_PASSWORD
+    jsonData:
+      database: crypto_ambush_signals
+      sslmode: disable
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+    editable: false

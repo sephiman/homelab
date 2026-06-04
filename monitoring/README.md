@@ -50,6 +50,7 @@ Discovery uses a read-only [Docker socket proxy](https://github.com/Tecnativa/do
 - **Mosquitto / MQTT**: messages in/out, connected clients, retained messages.
 - **`crypto-signal-sweep`** (optional): a personal Python trading bot in a separate repo ([sephiman/crypto-signal-sweep](https://github.com/sephiman/crypto-signal-sweep)). The stack picks up its metrics if it's running; nothing here depends on it.
 - **`satoshi-scanner`** (optional): a personal Python Bitcoin-address scanner in a separate repo ([sephiman/satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). Auto-discovered the same way as `crypto-signal-sweep`.
+- **`crypto-ambush`** (optional): the three ambush trading bots — `cambush_*` metrics auto-discovered like the above, plus read-only Postgres datasources for trading performance (see [crypto-ambush dashboard setup](#crypto-ambush-dashboard-setup)).
 
 ## Prerequisites
 
@@ -91,7 +92,7 @@ First boot:
 
 ## Dashboards
 
-Six dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
+Seven dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
 
 | File                          | Dashboard                                                                                       |
 |-------------------------------|-------------------------------------------------------------------------------------------------|
@@ -100,9 +101,23 @@ Six dashboards are preprovisioned under the **Homelab** folder (auto-loaded from
 | `container-logs.json`         | Loki log explorer with container/regex/level filters + error & warning counters                 |
 | `mosquitto.json`              | MQTT broker — clients, subscriptions, msg/byte rate, dropped, load avg                          |
 | `crypto-signal-sweep.json`    | Trading bots — candle freshness, signals, loop health, exchange latency/errors, side errors     |
+| `crypto-ambush.json`          | The three crypto-ambush bots — PnL/win rate/positions from Postgres, ops from `cambush_*`, container health + error logs |
 | `satoshi-scanner.json`        | Bitcoin address scanner — scan rate, Blockstream latency/rate-limit, DB hit/miss, Telegram alerts |
 
 > `crypto-signal-sweep` and `satoshi-scanner` are personal Python services living in separate repos ([crypto-signal-sweep](https://github.com/sephiman/crypto-signal-sweep), [satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). This stack only consumes their `/metrics` endpoints via the auto-discovery convention above — if a service isn't running, its dashboard simply shows "No data" and the rest of the stack is unaffected. Treat them as examples of how any future app plugs in.
+
+### crypto-ambush dashboard setup
+
+`crypto-ambush.json` covers the three crypto-ambush bots (`ambush-bingx-15m`, `ambush-bingx-1h`, `ambush-binance-signals`). Besides Prometheus/Loki it reads the trading tables straight from Postgres — one provisioned datasource per bot database (`ambush-pg` → `crypto_ambush`, `ambush-pg-1h` → `crypto_ambush_1h`, `ambush-pg-signals` → `crypto_ambush_signals`), all via a SELECT-only role. One-time setup:
+
+1. Create the read-only role (pick a password):
+   ```bash
+   docker cp ../postgres/grafana_ro.sql postgresdb:/tmp/grafana_ro.sql
+   docker exec -it postgresdb psql -U root -d postgres -v ro_password='<password>' -f /tmp/grafana_ro.sql
+   ```
+2. Put the same password in `monitoring/.env` as `AMBUSH_DB_RO_PASSWORD`, then `docker compose up -d grafana`.
+
+The ops-health row uses the bots' `cambush_*` metrics — they're auto-discovered via the `prometheus.scrape` labels already set in the crypto-ambush compose file (rebuild + restart the bots after pulling that change). If the role/password isn't set up, only the Postgres panels error; metrics/log panels keep working.
 
 Edit them in the UI freely (`allowUiUpdates: true`); to make changes survive a restart, export the JSON and overwrite the file.
 

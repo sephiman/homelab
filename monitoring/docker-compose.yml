@@ -95,6 +95,10 @@ services:
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_ALERT_CHAT_ID=${TELEGRAM_ALERT_CHAT_ID:-}
+      # Read-only crypto-ambush DB role for the trading dashboard datasources
+      # (see postgres/grafana_ro.sql). Empty -> those datasources fail auth,
+      # everything else keeps working.
+      - AMBUSH_DB_RO_PASSWORD=${AMBUSH_DB_RO_PASSWORD:-}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
