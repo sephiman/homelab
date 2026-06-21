@@ -41,6 +41,7 @@ cp .env.example .env
 ```
 
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` — credentials for `pg_dumpall` (same as the `postgres` stack).
+- `PG_EXCLUDE_DATABASES` — databases to skip entirely (schema + data), comma/space separated. E.g. `satoshi_scanner`. Empty = dump everything.
 - `RCLONE_REMOTE`, `RCLONE_PATH` — rclone remote name and destination folder on the Drive.
 - `BACKUP_CRON` — cron schedule.
 - `LOCAL_KEEP`, `REMOTE_RETENTION_DAYS` — retention.

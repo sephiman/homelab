@@ -15,7 +15,7 @@ touch "${LOG}"
 # busybox crond runs jobs with a minimal environment, so persist the relevant
 # variables to a file that the cron job sources before running the backup.
 printenv \
-  | grep -E '^(POSTGRES_|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|TZ=)' \
+  | grep -E '^(POSTGRES_|PG_EXCLUDE_DATABASES=|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|TZ=)' \
   | sed -E "s/^([^=]+)=(.*)$/export \1='\2'/" \
   > /etc/backup.env
 

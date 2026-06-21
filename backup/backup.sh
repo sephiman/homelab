@@ -10,6 +10,7 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 RCLONE_PATH="${RCLONE_PATH:-homelab-backups}"
 LOCAL_KEEP="${LOCAL_KEEP:-1}"
 REMOTE_RETENTION_DAYS="${REMOTE_RETENTION_DAYS:-7}"
+PG_EXCLUDE_DATABASES="${PG_EXCLUDE_DATABASES:-}"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -31,10 +32,22 @@ log "Archiving jellyfin config..."
 tar czf "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
 
 # 2. PostgreSQL dump (all databases + roles) -------------------------------
-log "Dumping PostgreSQL from ${POSTGRES_HOST}..."
+# Build --exclude-database flags from PG_EXCLUDE_DATABASES (comma/space list).
+EXCLUDE_ARGS=()
+for db in ${PG_EXCLUDE_DATABASES//,/ }; do
+  EXCLUDE_ARGS+=( "--exclude-database=${db}" )
+done
+
+if [ "${#EXCLUDE_ARGS[@]}" -gt 0 ]; then
+  log "Dumping PostgreSQL from ${POSTGRES_HOST} (excluding: ${PG_EXCLUDE_DATABASES})..."
+else
+  log "Dumping PostgreSQL from ${POSTGRES_HOST}..."
+fi
+
 PGPASSWORD="${POSTGRES_PASSWORD}" pg_dumpall \
   -h "${POSTGRES_HOST}" \
   -U "${POSTGRES_USER}" \
+  "${EXCLUDE_ARGS[@]}" \
   | gzip > "${DEST}/postgres-all.sql.gz"
 
 # Checksums for integrity verification on restore.
