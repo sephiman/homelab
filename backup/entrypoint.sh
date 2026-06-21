@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# If a command is passed (e.g. `rclone config`, `backup.sh`, `sh`), run it
+# directly instead of starting the scheduler. This is what lets the one-time
+# `docker compose run --rm backup rclone config` work.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
 CRON="${BACKUP_CRON:-5 3 * * *}"
 LOG=/var/log/backup.log
 touch "${LOG}"
