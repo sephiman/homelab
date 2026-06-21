@@ -1,0 +1,35 @@
+services:
+  backup:
+    build: .
+    image: homelab-backup
+    container_name: backup
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgresdb}
+      RCLONE_CONFIG: /config/rclone/rclone.conf
+      RCLONE_REMOTE: ${RCLONE_REMOTE:-gdrive}
+      RCLONE_PATH: ${RCLONE_PATH:-homelab-backups}
+      BACKUP_CRON: ${BACKUP_CRON:-5 3 * * *}
+      LOCAL_KEEP: ${LOCAL_KEEP:-1}
+      REMOTE_RETENTION_DAYS: ${REMOTE_RETENTION_DAYS:-7}
+      RUN_ON_START: ${RUN_ON_START:-false}
+      TZ: ${TZ:-Europe/Amsterdam}
+    volumes:
+      # rclone config (created once on the host with `rclone config`).
+      - ${HOME}/backup/config/rclone:/config/rclone
+      # Local backup archives (staging + short local history).
+      - ${HOME}/backup/archives:/backups
+      # Sources mounted read-only.
+      - ${HOME}/homeassistant:/sources/homeassistant:ro
+      - ${HOME}/qbittorrent:/sources/qbittorrent:ro
+      - ${HOME}/rustdesk:/sources/rustdesk:ro
+      - ${HOME}/jellyfin/config:/sources/jellyfin-config:ro
+    networks:
+      - my-network
+    restart: unless-stopped
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers

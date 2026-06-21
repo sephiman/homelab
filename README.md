@@ -12,6 +12,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 - [`media/`](./media) — Jellyfin (media server) + qBittorrent (torrent client).
 - [`remote/`](./remote) — Self-hosted RustDesk (remote access server).
 - [`home-automation/`](./home-automation) — Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker).
+- [`backup/`](./backup) — Scheduled backups of service data + PostgreSQL, uploaded to Google Drive via rclone.
 
 ## Shared network (`all_dockers`)
 
@@ -76,6 +77,7 @@ cp .env.example .env
 3. `nginx` — reverse proxy to expose the rest.
 4. `monitoring` — observability and Docker management.
 5. `media` / `remote` / `home-automation` — application stacks.
+6. `backup` — after the data stacks exist, so there is something to back up.
 
 ## License
 
