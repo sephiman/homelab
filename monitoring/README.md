@@ -108,7 +108,7 @@ Seven dashboards are preprovisioned under the **Homelab** folder (auto-loaded fr
 
 ### crypto-ambush dashboard setup
 
-`crypto-ambush.json` covers the three crypto-ambush bots (`ambush-bingx-15m`, `ambush-bingx-1h`, `ambush-binance-signals`). Besides Prometheus/Loki it reads the trading tables straight from Postgres — one provisioned datasource per bot database (`ambush-pg` → `crypto_ambush`, `ambush-pg-1h` → `crypto_ambush_1h`, `ambush-pg-signals` → `crypto_ambush_signals`), all via a SELECT-only role. One-time setup:
+`crypto-ambush.json` covers the three crypto-ambush bots (`ambush-bingx` — the unified BingX combi bot running 15m+1h, `ambush-bitmart`, `ambush-binance-signals`). Besides Prometheus/Loki it reads the trading tables straight from Postgres — one provisioned datasource per bot database (`ambush-pg` → `crypto_ambush`, `ambush-pg-bitmart` → `crypto_ambush_bitmart`, `ambush-pg-signals` → `crypto_ambush_signals`), all via a SELECT-only role. One-time setup:
 
 1. Create the read-only role (pick a password):
    ```bash

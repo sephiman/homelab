@@ -13,7 +13,7 @@ services:
       - my-network
 
   prometheus:
-    image: prom/prometheus:v3.11.3
+    image: prom/prometheus:v3.13.0
     container_name: prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -51,7 +51,7 @@ services:
       - my-network
 
   loki:
-    image: grafana/loki:3.7.2
+    image: grafana/loki:3.7.3
     container_name: loki
     command: ["-config.file=/etc/loki/loki-config.yml"]
     volumes:
@@ -64,7 +64,7 @@ services:
       - my-network
 
   alloy:
-    image: grafana/alloy:v1.16.1
+    image: grafana/alloy:v1.17.1
     container_name: alloy
     command:
       - "run"
@@ -85,7 +85,7 @@ services:
       - my-network
 
   grafana:
-    image: grafana/grafana:13.0.1
+    image: grafana/grafana:13.1.0
     container_name: grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
@@ -135,7 +135,7 @@ services:
       - my-network
 
   cadvisor:
-    image: ghcr.io/google/cadvisor:0.57.0
+    image: ghcr.io/google/cadvisor:v0.60.3
     container_name: cadvisor
     privileged: true
     command:

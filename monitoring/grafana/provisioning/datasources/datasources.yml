@@ -36,8 +36,8 @@ datasources:
       postgresVersion: 1500
     editable: false
 
-  - name: Ambush Postgres (1h)
-    uid: ambush-pg-1h
+  - name: Ambush Postgres (bitmart)
+    uid: ambush-pg-bitmart
     type: grafana-postgresql-datasource
     access: proxy
     url: postgresdb:5432
@@ -45,7 +45,7 @@ datasources:
     secureJsonData:
       password: $AMBUSH_DB_RO_PASSWORD
     jsonData:
-      database: crypto_ambush_1h
+      database: crypto_ambush_bitmart
       sslmode: disable
       maxOpenConns: 4
       maxIdleConns: 2

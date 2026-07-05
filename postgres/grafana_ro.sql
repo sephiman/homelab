@@ -19,18 +19,18 @@ ALTER ROLE grafana_ro SET default_transaction_read_only = on;
 ALTER ROLE grafana_ro SET statement_timeout = '10s';
 
 GRANT CONNECT ON DATABASE crypto_ambush TO grafana_ro;
-GRANT CONNECT ON DATABASE crypto_ambush_1h TO grafana_ro;
+GRANT CONNECT ON DATABASE crypto_ambush_bitmart TO grafana_ro;
 GRANT CONNECT ON DATABASE crypto_ambush_signals TO grafana_ro;
 
--- crypto_ambush: 15m live bot (amb_live_signals).
+-- crypto_ambush: BingX live bot, unified combi 15m+1h (amb_live_signals).
 \connect crypto_ambush
 GRANT USAGE ON SCHEMA public TO grafana_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana_ro;
 -- Tables the bots create later (init_db micro-migrations) stay readable.
 ALTER DEFAULT PRIVILEGES FOR ROLE root IN SCHEMA public GRANT SELECT ON TABLES TO grafana_ro;
 
--- crypto_ambush_1h: 1h live bot (amb_live_signals).
-\connect crypto_ambush_1h
+-- crypto_ambush_bitmart: Bitmart live bot, combi 15m+1h (amb_live_signals).
+\connect crypto_ambush_bitmart
 GRANT USAGE ON SCHEMA public TO grafana_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana_ro;
 ALTER DEFAULT PRIVILEGES FOR ROLE root IN SCHEMA public GRANT SELECT ON TABLES TO grafana_ro;
