@@ -4,13 +4,33 @@
   "description": "The three crypto-ambush bots: BingX (LIVE, unified combi 15m+1h, crypto_ambush), Bitmart (LIVE, combi, crypto_ambush_bitmart), Binance (SIGNAL-ONLY, crypto_ambush_signals). Trading performance from Postgres (amb_* tables), ops health from Prometheus (cambush_*), containers from cAdvisor, logs from Loki. Win/PnL semantics mirror the bot's own reports: resolved = FILLED + hit in (TP1,TP2,SL); wins = TP1+TP2; pnl_percent is the bot's bottom-line column.",
   "tags": ["homelab", "crypto-ambush", "trading"],
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "refresh": "30s",
   "time": {"from": "now-7d", "to": "now"},
   "timezone": "browser",
   "annotations": {"list": []},
-  "templating": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "bot",
+        "label": "Bot",
+        "type": "custom",
+        "description": "Filter the analysis body, ops-health and logs panels to one or more bots. 'All' = every bot (identical to the unfiltered view). The top status header always shows all bots.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": null,
+        "query": "BingX : bingx, Bitmart : bitmart, Signals : binance-signals",
+        "options": [
+          {"text": "BingX", "value": "bingx", "selected": false},
+          {"text": "Bitmart", "value": "bitmart", "selected": false},
+          {"text": "Signals", "value": "binance-signals", "selected": false}
+        ],
+        "current": {"text": "All", "value": ["$__all"], "selected": false},
+        "hide": 0
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -218,21 +238,21 @@
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) ORDER BY 1"
+          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
         },
         {
           "refId": "B",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) ORDER BY 1"
+          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
         },
         {
           "refId": "C",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) ORDER BY 1"
+          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -252,7 +272,7 @@
       "title": "BingX — outcomes",
       "gridPos": {"h": 3, "w": 10, "x": 14, "y": 9},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND $__timeFilter(hit_timestamp)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
       "fieldConfig": {
         "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
         "overrides": [
@@ -269,7 +289,7 @@
       "title": "Bitmart — outcomes",
       "gridPos": {"h": 3, "w": 10, "x": 14, "y": 12},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND $__timeFilter(hit_timestamp)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
       "fieldConfig": {
         "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
         "overrides": [
@@ -286,7 +306,7 @@
       "title": "Signals — outcomes",
       "gridPos": {"h": 3, "w": 10, "x": 14, "y": 15},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND $__timeFilter(hit_timestamp)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
       "fieldConfig": {
         "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
         "overrides": [
@@ -309,21 +329,21 @@
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "B",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "C",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -349,21 +369,21 @@
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"BingX (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"BingX (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bingx' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "B",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Bitmart (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Bitmart (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bitmart' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "C",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) AND 'binance-signals' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -391,7 +411,7 @@
       "title": "BingX — funnel",
       "gridPos": {"h": 7, "w": 8, "x": 0, "y": 27},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bingx' IN (${bot:singlequote})"}],
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -410,7 +430,7 @@
       "title": "Bitmart — funnel",
       "gridPos": {"h": 7, "w": 8, "x": 8, "y": 27},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bitmart' IN (${bot:singlequote})"}],
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -429,7 +449,7 @@
       "title": "Signals — funnel",
       "gridPos": {"h": 7, "w": 8, "x": 16, "y": 27},
       "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_signal_alerts WHERE $__timeFilter(created_at)"}],
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) AND 'binance-signals' IN (${bot:singlequote})"}],
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -462,21 +482,21 @@
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'BingX' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED') ORDER BY 10 DESC"
+          "rawSql": "SELECT 'BingX' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'bingx' IN (${bot:singlequote}) ORDER BY 10 DESC"
         },
         {
           "refId": "B",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED') ORDER BY 10 DESC"
+          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'bitmart' IN (${bot:singlequote}) ORDER BY 10 DESC"
         },
         {
           "refId": "C",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'signals' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_signal_alerts WHERE position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED') ORDER BY 10 DESC"
+          "rawSql": "SELECT 'signals' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_signal_alerts WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'binance-signals' IN (${bot:singlequote}) ORDER BY 10 DESC"
         }
       ],
       "transformations": [{"id": "merge", "options": {}}],
@@ -525,21 +545,21 @@
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'BingX' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') ORDER BY hit_timestamp DESC LIMIT 15"
+          "rawSql": "SELECT 'BingX' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
         },
         {
           "refId": "B",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') ORDER BY hit_timestamp DESC LIMIT 15"
+          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
         },
         {
           "refId": "C",
           "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'signals' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') ORDER BY hit_timestamp DESC LIMIT 15"
+          "rawSql": "SELECT 'signals' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
         }
       ],
       "transformations": [{"id": "merge", "options": {}}],
@@ -600,7 +620,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, instance) (rate(cambush_exchange_request_seconds_bucket{instance=~\"ambush-.*\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, instance) (rate(cambush_exchange_request_seconds_bucket{instance=~\"ambush-(${bot:pipe})\"}[5m])))",
           "legendFormat": "{{instance}}"
         }
       ],
@@ -624,7 +644,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (instance, code) (rate(cambush_exchange_errors_total{instance=~\"ambush-.*\"}[5m])) * 60",
+          "expr": "sum by (instance, code) (rate(cambush_exchange_errors_total{instance=~\"ambush-(${bot:pipe})\"}[5m])) * 60",
           "legendFormat": "{{instance}} {{code}}"
         }
       ],
@@ -649,7 +669,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time() - min by (instance) (cambush_last_candle_timestamp{instance=~\"ambush-.*\"})",
+          "expr": "time() - min by (instance) (cambush_last_candle_timestamp{instance=~\"ambush-(${bot:pipe})\"})",
           "legendFormat": "{{instance}}"
         }
       ],
@@ -670,7 +690,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sort_desc(sum by (reason) (increase(cambush_pair_skipped_total{instance=~\"ambush-.*\"}[$__range])))",
+          "expr": "sort_desc(sum by (reason) (increase(cambush_pair_skipped_total{instance=~\"ambush-(${bot:pipe})\"}[$__range])))",
           "legendFormat": "{{reason}}",
           "instant": true
         }
@@ -693,7 +713,7 @@
       "title": "Telegram errors (range)",
       "gridPos": {"h": 7, "w": 4, "x": 20, "y": 60},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [{"refId": "A", "expr": "sum(increase(cambush_telegram_send_errors_total{instance=~\"ambush-.*\"}[$__range]))"}],
+      "targets": [{"refId": "A", "expr": "sum(increase(cambush_telegram_send_errors_total{instance=~\"ambush-(${bot:pipe})\"}[$__range]))"}],
       "fieldConfig": {
         "defaults": {
           "noValue": "0",
@@ -719,7 +739,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(container_cpu_usage_seconds_total{name=~\"ambush-.*\"}[5m]) * 100",
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\"ambush-(${bot:pipe})\"}[5m]) * 100",
           "legendFormat": "{{name}}"
         }
       ],
@@ -743,7 +763,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "container_memory_usage_bytes{name=~\"ambush-.*\"}",
+          "expr": "container_memory_usage_bytes{name=~\"ambush-(${bot:pipe})\"}",
           "legendFormat": "{{name}}"
         }
       ],
@@ -767,7 +787,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "changes(container_start_time_seconds{name=~\"ambush-.*\"}[1h])",
+          "expr": "changes(container_start_time_seconds{name=~\"ambush-(${bot:pipe})\"}[1h])",
           "legendFormat": "{{name}}"
         }
       ],
@@ -792,7 +812,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (container) (count_over_time({container=~\"ambush-.*\"} |~ \"(?i)error|exception|traceback\" [10m]))",
+          "expr": "sum by (container) (count_over_time({container=~\"ambush-(${bot:pipe})\"} |~ \"(?i)error|exception|traceback\" [10m]))",
           "legendFormat": "{{container}}"
         }
       ],
@@ -816,7 +836,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{container=~\"ambush-.*\"} |~ \"(?i)error|warn|exception|traceback\""
+          "expr": "{container=~\"ambush-(${bot:pipe})\"} |~ \"(?i)error|warn|exception|traceback\""
         }
       ],
       "options": {
