@@ -8,15 +8,15 @@ Homelab management + observability stack (Phase 1: full coverage for the `home-a
 |----------------------|-------------------------|----------------|------------------------------------------------------------------------|
 | portainer            | `portainer`             | `9000`, `9443` | Docker UI                                                              |
 | grafana              | `grafana`               | `3000`         | Dashboards + unified alerting (Telegram)                               |
-| prometheus           | `prometheus`            | `9090`         | Metrics store, 15d retention                                           |
+| prometheus           | `prometheus`            | `9090` (loopback) | Metrics store, 15d retention                                        |
 | docker-socket-proxy  | `docker-socket-proxy`   | —              | Read-only Docker API for Prometheus service discovery                  |
-| loki                 | `loki`                  | `3100`         | Log store, 30d retention                                               |
-| alloy                | `alloy`                 | `12345`        | Grafana Alloy — ships every container's logs to Loki                   |
+| loki                 | `loki`                  | `3100` (loopback) | Log store, 30d retention                                            |
+| alloy                | `alloy`                 | `12345` (loopback) | Grafana Alloy — ships every container's logs to Loki               |
 | node-exporter        | `node-exporter`         | —              | Host CPU/mem/disk/net metrics                                          |
 | cadvisor             | `cadvisor`              | —              | Per-container metrics                                                  |
 | mosquitto-exporter   | `mosquitto-exporter`    | —              | MQTT broker metrics (clients, messages/sec)                            |
 
-Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names.
+Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names. Prometheus, Loki and Alloy bind to `127.0.0.1` — their UIs work from the host (`http://localhost:9090`, …) but are not reachable from the LAN.
 
 ## Auto-discovery: how to add a new scrape target
 
@@ -48,8 +48,7 @@ Discovery uses a read-only [Docker socket proxy](https://github.com/Tecnativa/do
 - **All container logs**: shipped by Alloy via Docker service discovery — labels include `container`, `compose_project`, `compose_service`, `stream`.
 - **Home Assistant**: native Prometheus integration (entity states, automations, recorder, system stats).
 - **Mosquitto / MQTT**: messages in/out, connected clients, retained messages.
-- **`crypto-signal-sweep`** (optional): a personal Python trading bot in a separate repo ([sephiman/crypto-signal-sweep](https://github.com/sephiman/crypto-signal-sweep)). The stack picks up its metrics if it's running; nothing here depends on it.
-- **`satoshi-scanner`** (optional): a personal Python Bitcoin-address scanner in a separate repo ([sephiman/satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). Auto-discovered the same way as `crypto-signal-sweep`.
+- **`satoshi-scanner`** (optional): a personal Python Bitcoin-address scanner in a separate repo ([sephiman/satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). Auto-discovered via the `prometheus.scrape` labels; nothing here depends on it.
 - **`crypto-ambush`** (optional): the three ambush trading bots — `cambush_*` metrics auto-discovered like the above, plus read-only Postgres datasources for trading performance (see [crypto-ambush dashboard setup](#crypto-ambush-dashboard-setup)).
 
 ## Prerequisites
@@ -92,7 +91,7 @@ First boot:
 
 ## Dashboards
 
-Seven dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
+Six dashboards are preprovisioned under the **Homelab** folder (auto-loaded from `grafana/dashboards/`):
 
 | File                          | Dashboard                                                                                       |
 |-------------------------------|-------------------------------------------------------------------------------------------------|
@@ -100,11 +99,10 @@ Seven dashboards are preprovisioned under the **Homelab** folder (auto-loaded fr
 | `containers-overview.json`    | Per-container CPU/memory/network, restart count, snapshot table (cAdvisor)                      |
 | `container-logs.json`         | Loki log explorer with container/regex/level filters + error & warning counters                 |
 | `mosquitto.json`              | MQTT broker — clients, subscriptions, msg/byte rate, dropped, load avg                          |
-| `crypto-signal-sweep.json`    | Trading bots — candle freshness, signals, loop health, exchange latency/errors, side errors     |
 | `crypto-ambush.json`          | The three crypto-ambush bots — PnL/win rate/positions from Postgres, ops from `cambush_*`, container health + error logs |
 | `satoshi-scanner.json`        | Bitcoin address scanner — scan rate, Blockstream latency/rate-limit, DB hit/miss, Telegram alerts |
 
-> `crypto-signal-sweep` and `satoshi-scanner` are personal Python services living in separate repos ([crypto-signal-sweep](https://github.com/sephiman/crypto-signal-sweep), [satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). This stack only consumes their `/metrics` endpoints via the auto-discovery convention above — if a service isn't running, its dashboard simply shows "No data" and the rest of the stack is unaffected. Treat them as examples of how any future app plugs in.
+> `satoshi-scanner` and the crypto-ambush bots are personal Python services living in separate repos ([satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). This stack only consumes their `/metrics` endpoints via the auto-discovery convention above — if a service isn't running, its dashboard simply shows "No data" and the rest of the stack is unaffected. Treat them as examples of how any future app plugs in.
 
 ### crypto-ambush dashboard setup
 
@@ -159,6 +157,6 @@ Docker-managed named volumes (survive `docker compose down`):
 ## Security notes
 
 - `alloy`, `cadvisor` and `portainer` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
-- Only Grafana should be exposed externally (through NPM, with HTTPS). Leave Prom/Loki/Alloy/exporters internal.
-- Pin image tags (already done) — Loki/Prom schemas can break on `:latest`.
+- Only Grafana should be exposed externally (through NPM, with HTTPS). Prometheus, Loki and Alloy are already loopback-only; exporters publish no host port at all.
+- Pin image tags — Loki/Prom schemas can break on `:latest`. Done for everything except Portainer (`portainer-ce` still tracks `latest`; pin it to the version you're running when convenient).
 

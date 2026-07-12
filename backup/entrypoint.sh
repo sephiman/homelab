@@ -14,13 +14,14 @@ touch "${LOG}"
 
 # busybox crond runs jobs with a minimal environment, so persist the relevant
 # variables to a file that the cron job sources before running the backup.
-printenv \
-  | grep -E '^(POSTGRES_|PG_EXCLUDE_DATABASES=|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|TZ=)' \
-  | sed -E "s/^([^=]+)=(.*)$/export \1='\2'/" \
+# `export -p` quotes values safely (quotes, spaces, ...), unlike hand-rolled
+# sed quoting; the emitted `declare -x` lines require bash, hence `bash -c`.
+export -p \
+  | grep -E '^declare -x (POSTGRES_|PG_EXCLUDE_DATABASES=|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|TZ=)' \
   > /etc/backup.env
 
 cat > /etc/crontabs/root <<EOF
-${CRON} . /etc/backup.env; /usr/local/bin/backup.sh >> ${LOG} 2>&1
+${CRON} bash -c '. /etc/backup.env; /usr/local/bin/backup.sh' >> ${LOG} 2>&1
 EOF
 
 echo "[entrypoint] Backup scheduler started."

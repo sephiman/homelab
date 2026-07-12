@@ -12,7 +12,9 @@ groups:
           description: "Prometheus has failed to scrape Home Assistant for 5 minutes."
 
       - alert: MosquittoDown
-        expr: up{instance="mosquitto-exporter"} == 0
+        # absent() covers the exporter container being stopped entirely — its
+        # docker_sd target disappears and `up` would have no series to match.
+        expr: up{instance="mosquitto-exporter"} == 0 or absent(up{instance="mosquitto-exporter"})
         for: 5m
         labels:
           severity: critical
@@ -37,7 +39,10 @@ groups:
           summary: "Filesystem {{ $labels.mountpoint }} above 90% used"
 
       - alert: ContainerRestartingLoop
-        expr: increase(container_start_time_seconds[15m]) > 3
+        # container_start_time_seconds is a gauge (unix timestamp), so count
+        # value changes (= restarts), not increase() which fires on a single
+        # restart. name!="" skips cgroup parents that carry no container name.
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 3
         for: 5m
         labels:
           severity: warning
