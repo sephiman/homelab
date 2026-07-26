@@ -1,15 +1,24 @@
 {
   "uid": "homelab-crypto-ambush",
-  "title": "Homelab — Crypto Ambush",
-  "description": "The three crypto-ambush bots: BingX (LIVE, unified combi 15m+1h, crypto_ambush), Bitmart (LIVE, combi, crypto_ambush_bitmart), Binance (SIGNAL-ONLY, crypto_ambush_signals). Trading performance from Postgres (amb_* tables), ops health from Prometheus (cambush_*), containers from cAdvisor, logs from Loki. Win/PnL semantics mirror the bot's own reports: resolved = FILLED + hit in (TP1,TP2,SL); wins = TP1+TP2; pnl_percent is the bot's bottom-line column.",
-  "tags": ["homelab", "crypto-ambush", "trading"],
+  "title": "Homelab \u2014 Crypto Ambush",
+  "description": "The crypto-ambush bots: BingX (LIVE, unified combi 15m+1h, crypto_ambush), Binance (SIGNAL-ONLY, crypto_ambush_signals). Trading performance from Postgres (amb_* tables), ops health from Prometheus (cambush_*), containers from cAdvisor, logs from Loki. Win/PnL semantics mirror the bot's own reports: resolved = FILLED + hit in (TP1,TP2,SL); wins = TP1+TP2; pnl_percent is the bot's bottom-line column.",
+  "tags": [
+    "homelab",
+    "crypto-ambush",
+    "trading"
+  ],
   "schemaVersion": 39,
   "version": 3,
   "editable": true,
   "refresh": "30s",
-  "time": {"from": "now-7d", "to": "now"},
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
   "timezone": "browser",
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "templating": {
     "list": [
       {
@@ -20,13 +29,26 @@
         "multi": true,
         "includeAll": true,
         "allValue": null,
-        "query": "BingX : bingx, Bitmart : bitmart, Signals : binance-signals",
+        "query": "BingX : bingx, Signals : binance-signals",
         "options": [
-          {"text": "BingX", "value": "bingx", "selected": false},
-          {"text": "Bitmart", "value": "bitmart", "selected": false},
-          {"text": "Signals", "value": "binance-signals", "selected": false}
+          {
+            "text": "BingX",
+            "value": "bingx",
+            "selected": false
+          },
+          {
+            "text": "Signals",
+            "value": "binance-signals",
+            "selected": false
+          }
         ],
-        "current": {"text": "All", "value": ["$__all"], "selected": false},
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ],
+          "selected": false
+        },
         "hide": 0
       }
     ]
@@ -35,221 +57,459 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "BingX live — bot",
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [{"refId": "A", "expr": "(time() - container_last_seen{name=\"ambush-bingx\"}) < bool 120", "instant": true}],
+      "title": "BingX live \u2014 bot",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - container_last_seen{name=\"ambush-bingx\"}) < bool 120",
+          "instant": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            {"type": "value", "options": {"1": {"text": "UP", "color": "green", "index": 0}, "0": {"text": "DOWN", "color": "red", "index": 1}}},
-            {"type": "special", "options": {"match": "null", "result": {"text": "DOWN", "color": "red", "index": 2}}}
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 0
+                },
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 2
+                }
+              }
+            }
           ],
           "noValue": "DOWN",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "background", "graphMode": "none", "textMode": "value"}
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "BingX live — open positions",
-      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS open FROM amb_live_signals WHERE position_status IN ('OPEN','TP1_SECURED')"}],
-      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}},
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "title": "BingX live \u2014 open positions",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS open FROM amb_live_signals WHERE position_status IN ('OPEN','TP1_SECURED')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Bitmart live — bot",
-      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [{"refId": "A", "expr": "(time() - container_last_seen{name=\"ambush-bitmart\"}) < bool 120", "instant": true}],
+      "title": "Signals \u2014 bot",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - container_last_seen{name=\"ambush-binance-signals\"}) < bool 120",
+          "instant": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            {"type": "value", "options": {"1": {"text": "UP", "color": "green", "index": 0}, "0": {"text": "DOWN", "color": "red", "index": 1}}},
-            {"type": "special", "options": {"match": "null", "result": {"text": "DOWN", "color": "red", "index": 2}}}
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 0
+                },
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 2
+                }
+              }
+            }
           ],
           "noValue": "DOWN",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "background", "graphMode": "none", "textMode": "value"}
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Bitmart live — open positions",
-      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS open FROM amb_live_signals WHERE position_status IN ('OPEN','TP1_SECURED')"}],
-      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}},
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "title": "Signals \u2014 open (virtual)",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg-signals"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS open FROM amb_signal_alerts WHERE position_status IN ('OPEN','TP1_SECURED')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 5,
       "type": "stat",
-      "title": "Signals — bot",
-      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [{"refId": "A", "expr": "(time() - container_last_seen{name=\"ambush-binance-signals\"}) < bool 120", "instant": true}],
+      "title": "BingX \u2014 win rate (30d)",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE hit IN ('TP1','TP2')) / NULLIF(count(*), 0) AS win_rate FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {"type": "value", "options": {"1": {"text": "UP", "color": "green", "index": 0}, "0": {"text": "DOWN", "color": "red", "index": 1}}},
-            {"type": "special", "options": {"match": "null", "result": {"text": "DOWN", "color": "red", "index": 2}}}
-          ],
-          "noValue": "DOWN",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]}
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "no trades",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 55
+              },
+              {
+                "color": "green",
+                "value": 65
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "background", "graphMode": "none", "textMode": "value"}
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 6,
       "type": "stat",
-      "title": "Signals — open (virtual)",
-      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS open FROM amb_signal_alerts WHERE position_status IN ('OPEN','TP1_SECURED')"}],
-      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}},
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "title": "BingX \u2014 net PnL (30d)",
+      "gridPos": {
+        "x": 6,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(pnl_percent), 0) AS pnl FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 7,
       "type": "stat",
-      "title": "BingX — win rate (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE hit IN ('TP1','TP2')) / NULLIF(count(*), 0) AS win_rate FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
+      "title": "Signals \u2014 win rate (30d)",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg-signals"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE hit IN ('TP1','TP2')) / NULLIF(count(*), 0) AS win_rate FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "decimals": 1,
           "noValue": "no trades",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 55}, {"color": "green", "value": 65}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 55
+              },
+              {
+                "color": "green",
+                "value": 65
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 8,
       "type": "stat",
-      "title": "BingX — net PnL (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(sum(pnl_percent), 0) AS pnl FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
+      "title": "Signals \u2014 net PnL (30d)",
+      "gridPos": {
+        "x": 18,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg-signals"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(pnl_percent), 0) AS pnl FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "decimals": 2,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "id": 9,
-      "type": "stat",
-      "title": "Bitmart — win rate (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE hit IN ('TP1','TP2')) / NULLIF(count(*), 0) AS win_rate FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "noValue": "no trades",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 55}, {"color": "green", "value": 65}]}
-        }
-      },
-      "options": {"colorMode": "value", "graphMode": "none"}
-    },
-    {
-      "id": 10,
-      "type": "stat",
-      "title": "Bitmart — net PnL (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(sum(pnl_percent), 0) AS pnl FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 2,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0}]}
-        }
-      },
-      "options": {"colorMode": "value", "graphMode": "none"}
-    },
-    {
-      "id": 11,
-      "type": "stat",
-      "title": "Signals — win rate (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE hit IN ('TP1','TP2')) / NULLIF(count(*), 0) AS win_rate FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "noValue": "no trades",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 55}, {"color": "green", "value": 65}]}
-        }
-      },
-      "options": {"colorMode": "value", "graphMode": "none"}
-    },
-    {
-      "id": 12,
-      "type": "stat",
-      "title": "Signals — net PnL (30d)",
-      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 4},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(sum(pnl_percent), 0) AS pnl FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND hit_timestamp > (now() at time zone 'utc') - interval '30 days'"}],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 2,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0}]}
-        }
-      },
-      "options": {"colorMode": "value", "graphMode": "none"}
-    },
-    {
-      "id": 13,
       "type": "row",
       "title": "PnL & outcomes (dashboard range)",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 8},
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
     {
-      "id": 14,
+      "id": 10,
       "type": "timeseries",
       "title": "Cumulative net PnL %",
-      "gridPos": {"h": 9, "w": 14, "x": 0, "y": 9},
-      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
         },
         {
           "refId": "B",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
-        },
-        {
-          "refId": "C",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg-signals"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT hit_timestamp AS \"time\", sum(pnl_percent) OVER (ORDER BY hit_timestamp) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) ORDER BY 1"
@@ -258,89 +518,236 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "spanNulls": true}
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": true
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull"]},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 15,
+      "id": 11,
       "type": "stat",
-      "title": "BingX — outcomes",
-      "gridPos": {"h": 3, "w": 10, "x": 14, "y": 9},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
-      "fieldConfig": {
-        "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "✅ TP2"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
-          {"matcher": {"id": "byName", "options": "🎯 TP1"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "❌ SL"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
-        ]
+      "title": "BingX \u2014 outcomes",
+      "gridPos": {
+        "x": 14,
+        "y": 9,
+        "w": 10,
+        "h": 4
       },
-      "options": {"colorMode": "value", "graphMode": "none", "textMode": "value_and_name", "justifyMode": "center"}
-    },
-    {
-      "id": 16,
-      "type": "stat",
-      "title": "Bitmart — outcomes",
-      "gridPos": {"h": 3, "w": 10, "x": 14, "y": 12},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
-      "fieldConfig": {
-        "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "✅ TP2"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
-          {"matcher": {"id": "byName", "options": "🎯 TP1"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "❌ SL"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
-        ]
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg"
       },
-      "options": {"colorMode": "value", "graphMode": "none", "textMode": "value_and_name", "justifyMode": "center"}
-    },
-    {
-      "id": 17,
-      "type": "stat",
-      "title": "Signals — outcomes",
-      "gridPos": {"h": 3, "w": 10, "x": 14, "y": 15},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"✅ TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"🎯 TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"❌ SL\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"}],
-      "fieldConfig": {
-        "defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}},
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "✅ TP2"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
-          {"matcher": {"id": "byName", "options": "🎯 TP1"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "❌ SL"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
-        ]
-      },
-      "options": {"colorMode": "value", "graphMode": "none", "textMode": "value_and_name", "justifyMode": "center"}
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Daily net PnL %",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
-      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
       "targets": [
         {
           "refId": "A",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"\u2705 TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"\ud83c\udfaf TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"\u274c SL\" FROM amb_live_signals WHERE order_status = 'FILLED' AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u2705 TP2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\ud83c\udfaf TP1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u274c SL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Signals \u2014 outcomes",
+      "gridPos": {
+        "x": 14,
+        "y": 13,
+        "w": 10,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg-signals"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FILTER (WHERE hit = 'TP2') AS \"\u2705 TP2\", count(*) FILTER (WHERE hit = 'TP1') AS \"\ud83c\udfaf TP1\", count(*) FILTER (WHERE hit = 'SL') AS \"\u274c SL\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u2705 TP2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\ud83c\udfaf TP1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u274c SL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Daily net PnL %",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"BingX (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "B",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Bitmart (live)\" FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
-        },
-        {
-          "refId": "C",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg-signals"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT $__timeGroup(hit_timestamp, '1d') AS \"time\", sum(pnl_percent) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) AND $__timeFilter(hit_timestamp) GROUP BY 1 ORDER BY 1"
@@ -349,38 +756,56 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal"}}
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 19,
+      "id": 14,
       "type": "timeseries",
       "title": "Signals detected per day",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
-      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"BingX (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bingx' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
         },
         {
           "refId": "B",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Bitmart (live)\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bitmart' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
-        },
-        {
-          "refId": "C",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg-signals"
+          },
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT $__timeGroup(created_at, '1d') AS \"time\", count(*) AS \"Signals (virtual)\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) AND 'binance-signals' IN (${bot:singlequote}) GROUP BY 1 ORDER BY 1"
@@ -389,234 +814,474 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal"}}
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 20,
+      "id": 15,
       "type": "row",
       "title": "Order funnel (dashboard range)",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26},
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
     {
-      "id": 21,
+      "id": 16,
       "type": "bargauge",
-      "title": "BingX — funnel",
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 27},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bingx' IN (${bot:singlequote})"}],
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}
-        }
+      "title": "BingX \u2014 funnel",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 7
       },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
-    },
-    {
-      "id": 22,
-      "type": "bargauge",
-      "title": "Bitmart — funnel",
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 27},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bitmart' IN (${bot:singlequote})"}],
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}
-        }
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg"
       },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
-    },
-    {
-      "id": 23,
-      "type": "bargauge",
-      "title": "Signals — funnel",
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 27},
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
-      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) AND 'binance-signals' IN (${bot:singlequote})"}],
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]}
-        }
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
-    },
-    {
-      "id": 24,
-      "type": "row",
-      "title": "Positions & trades",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 25,
-      "type": "table",
-      "title": "Live book — open positions & resting limits",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 35},
-      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
       "targets": [
         {
           "refId": "A",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_live_signals WHERE $__timeFilter(created_at) AND 'bingx' IN (${bot:singlequote})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "bargauge",
+      "title": "Signals \u2014 funnel",
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ambush-pg-signals"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"Detected\", count(*) FILTER (WHERE order_status <> 'DETECTED') AS \"Limit placed\", count(*) FILTER (WHERE order_status = 'FILLED') AS \"Filled\", count(*) FILTER (WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL')) AS \"Resolved\", count(*) FILTER (WHERE order_status = 'CANCELLED_EXPIRY') AS \"Expired\", count(*) FILTER (WHERE order_status = 'CANCELLED_INVALIDATION') AS \"Invalidated\" FROM amb_signal_alerts WHERE $__timeFilter(created_at) AND 'binance-signals' IN (${bot:singlequote})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Positions & trades",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Live book \u2014 open positions & resting limits",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg"
+          },
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT 'BingX' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'bingx' IN (${bot:singlequote}) ORDER BY 10 DESC"
         },
         {
           "refId": "B",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_live_signals WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'bitmart' IN (${bot:singlequote}) ORDER BY 10 DESC"
-        },
-        {
-          "refId": "C",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg-signals"
+          },
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT 'signals' AS profile, pair, side, coalesce(position_status, order_status) AS status, projected_limit_price AS limit_price, fill_price, stop_loss, take_profit_1, take_profit_2, coalesce(fill_time, limit_placed_time, detected_time, created_at) AS since FROM amb_signal_alerts WHERE (position_status IN ('OPEN','TP1_SECURED') OR order_status IN ('DETECTED','LIMIT_PLACED')) AND 'binance-signals' IN (${bot:singlequote}) ORDER BY 10 DESC"
         }
       ],
-      "transformations": [{"id": "merge", "options": {}}],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        }
+      ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "status"},
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
             "properties": [
-              {"id": "mappings", "value": [
-                {"type": "value", "options": {
-                  "OPEN": {"text": "OPEN", "color": "green", "index": 0},
-                  "TP1_SECURED": {"text": "TP1_SECURED", "color": "blue", "index": 1},
-                  "LIMIT_PLACED": {"text": "LIMIT_PLACED", "color": "yellow", "index": 2},
-                  "DETECTED": {"text": "DETECTED", "color": "text", "index": 3}
-                }}
-              ]},
-              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OPEN": {
+                        "text": "OPEN",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "TP1_SECURED": {
+                        "text": "TP1_SECURED",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "LIMIT_PLACED": {
+                        "text": "LIMIT_PLACED",
+                        "color": "yellow",
+                        "index": 2
+                      },
+                      "DETECTED": {
+                        "text": "DETECTED",
+                        "color": "text",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "side"},
+            "matcher": {
+              "id": "byName",
+              "options": "side"
+            },
             "properties": [
-              {"id": "mappings", "value": [
-                {"type": "value", "options": {
-                  "LONG": {"text": "LONG", "color": "green", "index": 0},
-                  "SHORT": {"text": "SHORT", "color": "red", "index": 1}
-                }}
-              ]},
-              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "LONG": {
+                        "text": "LONG",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "SHORT": {
+                        "text": "SHORT",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
             ]
           }
         ]
       },
-      "options": {"showHeader": true, "sortBy": [{"displayName": "since", "desc": true}]}
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "since",
+            "desc": true
+          }
+        ]
+      }
     },
     {
-      "id": 26,
+      "id": 20,
       "type": "table",
       "title": "Recent closed trades (15 per profile)",
-      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 43},
-      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg"
+          },
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT 'BingX' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bingx' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
         },
         {
           "refId": "B",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-bitmart"},
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT 'Bitmart' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_live_signals WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'bitmart' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
-        },
-        {
-          "refId": "C",
-          "datasource": {"type": "grafana-postgresql-datasource", "uid": "ambush-pg-signals"},
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ambush-pg-signals"
+          },
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT 'signals' AS profile, pair, side, hit, fill_price, hit_price, round(pnl_percent::numeric, 3) AS pnl_pct, hit_timestamp FROM amb_signal_alerts WHERE order_status = 'FILLED' AND hit IN ('TP1','TP2','SL') AND 'binance-signals' IN (${bot:singlequote}) ORDER BY hit_timestamp DESC LIMIT 15"
         }
       ],
-      "transformations": [{"id": "merge", "options": {}}],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        }
+      ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "pnl_pct"},
+            "matcher": {
+              "id": "byName",
+              "options": "pnl_pct"
+            },
             "properties": [
-              {"id": "unit", "value": "percent"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0}]}},
-              {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "basic"}}
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "hit"},
+            "matcher": {
+              "id": "byName",
+              "options": "hit"
+            },
             "properties": [
-              {"id": "mappings", "value": [
-                {"type": "value", "options": {
-                  "TP2": {"text": "TP2", "color": "green", "index": 0},
-                  "TP1": {"text": "TP1", "color": "blue", "index": 1},
-                  "SL": {"text": "SL", "color": "red", "index": 2}
-                }}
-              ]},
-              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "TP2": {
+                        "text": "TP2",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "TP1": {
+                        "text": "TP1",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "SL": {
+                        "text": "SL",
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "side"},
+            "matcher": {
+              "id": "byName",
+              "options": "side"
+            },
             "properties": [
-              {"id": "mappings", "value": [
-                {"type": "value", "options": {
-                  "LONG": {"text": "LONG", "color": "green", "index": 0},
-                  "SHORT": {"text": "SHORT", "color": "red", "index": 1}
-                }}
-              ]},
-              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "LONG": {
+                        "text": "LONG",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "SHORT": {
+                        "text": "SHORT",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
             ]
           }
         ]
       },
-      "options": {"showHeader": true, "sortBy": [{"displayName": "hit_timestamp", "desc": true}]}
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "hit_timestamp",
+            "desc": true
+          }
+        ]
+      }
     },
     {
-      "id": 27,
+      "id": 21,
       "type": "row",
       "title": "Ops health (cambush metrics)",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 52},
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
     {
-      "id": 28,
+      "id": 22,
       "type": "timeseries",
       "title": "Exchange API latency p95 (5m)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 53},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -627,20 +1292,36 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": {"drawStyle": "line", "fillOpacity": 10}
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 29,
+      "id": 23,
       "type": "timeseries",
       "title": "Exchange API errors / min",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 53},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 12,
+        "y": 52,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -651,21 +1332,37 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {"drawStyle": "line", "fillOpacity": 10}
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 30,
+      "id": 24,
       "type": "stat",
       "title": "Oldest candle age per bot",
-      "description": "time since the stalest pair's last fetched candle — all bots run a 15m detection loop (combi bots also 1h), so this should stay well under 30m per bot",
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 60},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "time since the stalest pair's last fetched candle \u2014 all bots run a 15m detection loop (combi bots also 1h), so this should stay well under 30m per bot",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -676,17 +1373,51 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 3600}, {"color": "red", "value": 10800}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 10800
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
     },
     {
-      "id": 31,
+      "id": 25,
       "type": "bargauge",
       "title": "Skip reasons (range)",
-      "gridPos": {"h": 7, "w": 12, "x": 8, "y": 60},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 8,
+        "y": 60,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -698,44 +1429,103 @@
       "fieldConfig": {
         "defaults": {
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
         }
       },
       "options": {
         "orientation": "horizontal",
         "displayMode": "gradient",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
       }
     },
     {
-      "id": 32,
+      "id": 26,
       "type": "stat",
       "title": "Telegram errors (range)",
-      "gridPos": {"h": 7, "w": 4, "x": 20, "y": 60},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [{"refId": "A", "expr": "sum(increase(cambush_telegram_send_errors_total{instance=~\"ambush-(${bot:pipe})\"}[$__range]))"}],
+      "gridPos": {
+        "x": 20,
+        "y": 60,
+        "w": 4,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(cambush_telegram_send_errors_total{instance=~\"ambush-(${bot:pipe})\"}[$__range]))"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "noValue": "0",
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 10}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
         }
       },
-      "options": {"colorMode": "value", "graphMode": "none"}
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
-      "id": 33,
+      "id": 27,
       "type": "row",
       "title": "Containers & logs",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 67},
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
     {
-      "id": 34,
+      "id": 28,
       "type": "timeseries",
       "title": "CPU %",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 68},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -746,20 +1536,36 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "custom": {"drawStyle": "line", "fillOpacity": 10}
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 35,
+      "id": 29,
       "type": "timeseries",
       "title": "Memory",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 68},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 8,
+        "y": 68,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -770,20 +1576,36 @@
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "custom": {"drawStyle": "line", "fillOpacity": 10}
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 36,
+      "id": 30,
       "type": "timeseries",
       "title": "Restarts (1h window)",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 68},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "x": 16,
+        "y": 68,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -794,21 +1616,49 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {"drawStyle": "line", "fillOpacity": 10},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 37,
+      "id": 31,
       "type": "timeseries",
       "title": "Error/exception log lines (10m windows)",
-      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 76},
-      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "targets": [
         {
           "refId": "A",
@@ -819,20 +1669,36 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {"drawStyle": "bars", "fillOpacity": 70}
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70
+          }
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
-      "id": 38,
+      "id": 32,
       "type": "logs",
-      "title": "Errors & warnings — all ambush bots",
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 82},
-      "datasource": {"type": "loki", "uid": "loki"},
+      "title": "Errors & warnings \u2014 all ambush bots",
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "targets": [
         {
           "refId": "A",
