@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3.24
 
 # pg_dumpall must match the Postgres server major version (17).
 RUN apk add --no-cache \
