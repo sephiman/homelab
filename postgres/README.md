@@ -63,6 +63,10 @@ Or point any GUI client (DataGrip, DBeaver, …) at `localhost:5432`.
 
 [`grafana_ro.sql`](./grafana_ro.sql) creates the SELECT-only `grafana_ro` role used by the crypto-ambush dashboards in the `monitoring` stack. See [monitoring/README.md](../monitoring/README.md#crypto-ambush-dashboard-setup) for the one-time setup.
 
+## Vaultwarden database
+
+[`vaultwarden.sql`](./vaultwarden.sql) creates the `vaultwarden` role and database used by the [`vaultwarden`](../vaultwarden) stack. See [vaultwarden/README.md](../vaultwarden/README.md#1-create-the-database) for the one-time setup.
+
 ## Quick backup
 
 ```bash

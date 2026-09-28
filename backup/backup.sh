@@ -31,6 +31,11 @@ tar czf "${DEST}/rustdesk.tar.gz" -C /sources/rustdesk .
 log "Archiving jellyfin config..."
 tar czf "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
 
+# Vaultwarden: attachments, sends and rsa_key.pem (the vault itself is in PostgreSQL).
+# icon_cache is just downloaded favicons.
+log "Archiving vaultwarden data..."
+tar czf "${DEST}/vaultwarden.tar.gz" --exclude=./icon_cache -C /sources/vaultwarden .
+
 # 2. PostgreSQL dump (all databases + roles) -------------------------------
 # Build --exclude-database flags from PG_EXCLUDE_DATABASES (comma/space list).
 EXCLUDE_ARGS=()

@@ -26,6 +26,7 @@ services:
       - ${HOME}/qbittorrent:/sources/qbittorrent:ro
       - ${HOME}/rustdesk:/sources/rustdesk:ro
       - ${HOME}/jellyfin/config:/sources/jellyfin-config:ro
+      - ${HOME}/vaultwarden/data:/sources/vaultwarden:ro
     networks:
       - my-network
     restart: unless-stopped

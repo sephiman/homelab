@@ -1,0 +1,26 @@
+services:
+  vaultwarden:
+    # Pinned: upgrades run DB migrations, so bump deliberately (check the release notes first).
+    image: vaultwarden/server:1.37.3
+    container_name: vaultwarden
+    # Optional settings (SMTP_*) are read straight from .env; Vaultwarden treats an
+    # empty SMTP_HOST as "set", so they must be absent rather than blank.
+    env_file: .env
+    environment:
+      DOMAIN: ${VAULTWARDEN_DOMAIN:?set VAULTWARDEN_DOMAIN in .env}
+      DATABASE_URL: postgresql://vaultwarden:${VAULTWARDEN_DB_PASSWORD:?set VAULTWARDEN_DB_PASSWORD in .env}@${POSTGRES_HOST:-postgresdb}:5432/vaultwarden
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      SIGNUPS_ALLOWED: ${SIGNUPS_ALLOWED:-false}
+      INVITATIONS_ALLOWED: ${INVITATIONS_ALLOWED:-true}
+      SHOW_PASSWORD_HINT: "false"
+      TZ: ${TZ:-Europe/Amsterdam}
+    volumes:
+      - ${HOME}/vaultwarden/data:/data
+    networks:
+      - my-network
+    restart: unless-stopped
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers
