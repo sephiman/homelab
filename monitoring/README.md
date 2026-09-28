@@ -6,7 +6,7 @@ Homelab management + observability stack (Phase 1: full coverage for the `home-a
 
 | Service              | Container               | Host port      | Purpose                                                                |
 |----------------------|-------------------------|----------------|------------------------------------------------------------------------|
-| portainer            | `portainer`             | `9000`, `9443` | Docker UI                                                              |
+| dockhand             | `dockhand`              | `9000`         | Docker UI (containers, stacks, logs, shell)                            |
 | grafana              | `grafana`               | `3000`         | Dashboards + unified alerting (Telegram)                               |
 | prometheus           | `prometheus`            | `9090` (loopback) | Metrics store, 15d retention                                        |
 | docker-socket-proxy  | `docker-socket-proxy`   | —              | Read-only Docker API for Prometheus service discovery                  |
@@ -87,7 +87,7 @@ First boot:
 
 - Grafana → http://localhost:3000 (login with `GF_ADMIN_USER` / `GF_ADMIN_PASSWORD`).
 - Datasources (Prometheus, Loki) are provisioned automatically.
-- Portainer → http://localhost:9000 (create admin user within the first few minutes).
+- Dockhand → http://localhost:9000. Authentication is **off** on first launch — enable it right away in *Settings → Authentication* and create the admin user.
 
 ## Dashboards
 
@@ -148,7 +148,7 @@ Grafana will pick them up automatically from the Prometheus datasource (Alerting
 
 Docker-managed named volumes (survive `docker compose down`):
 
-- `portainer_data` — Portainer config.
+- `dockhand_data` — Dockhand SQLite DB (settings, users, stacks) and its encryption key.
 - `prometheus_data` — TSDB (~hundreds of MB/month).
 - `loki_data` — logs + indexes.
 - `alloy_data` — Alloy WAL / positions.
@@ -156,7 +156,7 @@ Docker-managed named volumes (survive `docker compose down`):
 
 ## Security notes
 
-- `alloy`, `cadvisor` and `portainer` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
+- `alloy`, `cadvisor` and `dockhand` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
 - Only Grafana should be exposed externally (through NPM, with HTTPS). Prometheus, Loki and Alloy are already loopback-only; exporters publish no host port at all.
-- Pin image tags — Loki/Prom schemas can break on `:latest`. Done for everything except Portainer (`portainer-ce` still tracks `latest`; pin it to the version you're running when convenient).
+- Pin image tags — Loki/Prom schemas can break on `:latest`. Done for everything, Dockhand included.
 

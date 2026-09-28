@@ -1,14 +1,14 @@
 services:
-  portainer:
-    image: portainer/portainer-ce
-    container_name: portainer
+  dockhand:
+    image: fnsys/dockhand:v1.0.49
+    container_name: dockhand
     ports:
-      - "9000:9000"
-      - "9443:9443"
+      # Grafana already owns host port 3000.
+      - "9000:3000"
     volumes:
-      - portainer_data:/data
+      - dockhand_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
-    restart: always
+    restart: unless-stopped
     networks:
       - my-network
 
@@ -171,7 +171,7 @@ services:
       - my-network
 
 volumes:
-  portainer_data:
+  dockhand_data:
   prometheus_data:
   loki_data:
   alloy_data:
