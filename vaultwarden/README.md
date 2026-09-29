@@ -69,7 +69,7 @@ cp .env.example .env
 - `ADMIN_TOKEN`: the hash from step 2.
 - `SIGNUPS_ALLOWED`: `false` normally; `true` only while you create your own account (see below).
 - `INVITATIONS_ALLOWED`: lets you invite others from the admin panel while signups stay closed.
-- `SMTP_*`: optional. Leave them **commented out** (not blank) to disable mail, because an empty `SMTP_HOST=` counts as set and stops the server from starting. Mail is needed for email-based 2FA, invitation emails, emergency access and "verify email".
+- `SMTP_*`: optional. `SMTP_FROM` must be a bare address (`vault@example.com`, not `"Name <vault@example.com>"`); put the display name in `SMTP_FROM_NAME`. Leave them **commented out** (not blank) to disable mail, because an empty `SMTP_HOST=` counts as set and stops the server from starting. Mail is needed for email-based 2FA, invitation emails, emergency access and "verify email".
 - `TZ`: timezone for logs.
 
 > Settings saved from the admin panel are written to `${HOME}/vaultwarden/data/config.json` and **override** the environment. If a `.env` change seems ignored, check that file (or the admin panel).
