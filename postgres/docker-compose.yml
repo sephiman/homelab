@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: postgresdb
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -9,7 +9,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     networks:
       - my-network
     restart: always
@@ -29,7 +29,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
 
 volumes:
-  pgdata:
+  pgdata18:
   pgadmin_data:
 
 networks:

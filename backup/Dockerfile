@@ -1,6 +1,6 @@
 FROM alpine:3.24
 
-# pg_dumpall must match the Postgres server major version (17).
+# pg_dumpall must match the Postgres server major version (18).
 RUN apk add --no-cache \
       bash \
       tzdata \
@@ -9,7 +9,7 @@ RUN apk add --no-cache \
       coreutils \
       findutils \
       rclone \
-      postgresql17-client
+      postgresql18-client
 
 COPY backup.sh /usr/local/bin/backup.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

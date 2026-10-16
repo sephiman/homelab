@@ -15,7 +15,7 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 
 Each run produces a dated folder (`YYYY-MM-DD_HHMMSS/`) with one `.tar.gz` per source, a gzipped SQL dump, and a `SHA256SUMS` file for integrity checks.
 
-Sources are mounted **read-only**; PostgreSQL is dumped over the `all_dockers` network against `postgresdb`, so the `pgdata` volume is never touched.
+Sources are mounted **read-only**; PostgreSQL is dumped over the `all_dockers` network against `postgresdb`, so the `pgdata18` volume is never touched.
 
 ## Schedule & retention
 

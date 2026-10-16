@@ -1,6 +1,6 @@
 # Postgres + pgAdmin
 
-PostgreSQL 17 with pgAdmin 4 as the web client.
+PostgreSQL 18 with pgAdmin 4 as the web client.
 
 ## Services
 
@@ -23,7 +23,7 @@ See the [root README](../README.md#shared-network-all_dockers) for details. You 
 
 ## Persistence
 
-- `pgdata` — Docker-managed named volume with Postgres data (`/var/lib/postgresql/data`).
+- `pgdata18` — Docker-managed named volume with Postgres data, mounted at `/var/lib/postgresql` (the image keeps the cluster in `18/docker` inside it).
 - `pgadmin_data` — Docker-managed named volume with pgAdmin configuration.
 
 ## Variables (.env)
@@ -74,3 +74,48 @@ docker exec postgresdb pg_dump -U <user> <db> > backup.sql
 ```
 
 Scheduled full backups (`pg_dumpall` → Google Drive) are handled by the [`backup`](../backup) stack.
+
+## Upgrading from 17 to 18
+
+Postgres 18 cannot open a 17 data directory, and the 18 image mounts its volume at `/var/lib/postgresql` instead of `.../data`. The upgrade runs `pg_upgrade --clone` into a new `pgdata18` volume, so the old `pgdata` volume is left untouched as a rollback. `--clone` uses reflinks (btrfs/XFS); on other filesystems use `--copy` and make sure there is free space for a full copy.
+
+1. Check the old cluster's settings — the new one must match them:
+
+   ```bash
+   docker exec postgresdb psql -U <user> -d postgres -Atc "select rolname from pg_roles where oid = 10; show data_checksums; select datcollate from pg_database where datname = 'template1';"
+   ```
+
+   The first value is the bootstrap superuser (`<user>` below). If checksums are `on`, drop `--no-data-checksums`; if the locale differs, change `--locale`.
+
+2. Stop Postgres and dry-run the upgrade (the dry run creates the empty 18 cluster; the real run reuses it):
+
+   ```bash
+   docker compose stop postgres
+   docker run --rm \
+     -v postgres_pgdata:/old \
+     -v postgres_pgdata18:/var/lib/postgresql \
+     -e PGDATAOLD=/old \
+     -e POSTGRES_INITDB_ARGS="-U <user> --no-data-checksums --encoding=UTF8 --locale=en_US.utf8" \
+     tianon/postgres-upgrade:17-to-18 \
+     --check -U <user>
+   ```
+
+3. When it reports `*Clusters are compatible*`, run the same command with `--clone` instead of `--check`.
+
+4. Re-add the rule that lets other containers connect. `pg_upgrade` does not carry `pg_hba.conf` over, and without it every app fails with `no pg_hba.conf entry for host`:
+
+   ```bash
+   docker run --rm -v postgres_pgdata18:/var/lib/postgresql alpine:3.24 \
+     sh -c 'echo "host all all all scram-sha-256" >> /var/lib/postgresql/18/docker/pg_hba.conf'
+   ```
+
+5. Start the 18 stack (`docker compose up -d`; the "volume already exists" warning is expected), then rebuild statistics and update extensions:
+
+   ```bash
+   docker exec postgresdb vacuumdb -U <user> --all --analyze-in-stages --missing-stats-only
+   docker exec postgresdb vacuumdb -U <user> --all --analyze-only
+   docker run --rm -v postgres_pgdata18:/n:ro alpine:3.24 cat /n/update_extensions.sql \
+     | docker exec -i postgresdb psql -U <user> -d postgres
+   ```
+
+6. Rebuild the [`backup`](../backup) image (it ships `postgresql18-client`) and run one backup. Once everything is verified, remove the old volume with `docker volume rm postgres_pgdata`. Do not run the generated `delete_old_cluster.sh`.

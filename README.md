@@ -8,7 +8,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 
 | Stack | What runs there | Main UI (host) |
 |-------|-----------------|----------------|
-| [`postgres/`](./postgres) | PostgreSQL 17 (shared database) + pgAdmin | http://localhost:5050 (pgAdmin); `localhost:5432` loopback only |
+| [`postgres/`](./postgres) | PostgreSQL 18 (shared database) + pgAdmin | http://localhost:5050 (pgAdmin); `localhost:5432` loopback only |
 | [`nginx/`](./nginx) | Nginx Proxy Manager — reverse proxy + Let's Encrypt certificates | http://localhost:81 |
 | [`monitoring/`](./monitoring) | Grafana, Prometheus, Loki, Alloy, node-exporter, cAdvisor, Dockhand | http://localhost:3000 |
 | [`media/`](./media) | Jellyfin (media server) + qBittorrent (torrent client) | http://localhost:8096 |
