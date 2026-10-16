@@ -1,7 +1,7 @@
 services:
   vaultwarden:
     # Pinned: upgrades run DB migrations, so bump deliberately (check the release notes first).
-    image: vaultwarden/server:1.37.3
+    image: vaultwarden/server:1.37.4
     container_name: vaultwarden
     # Optional settings (SMTP_*) are read straight from .env; Vaultwarden treats an
     # empty SMTP_HOST as "set", so they must be absent rather than blank.

@@ -53,7 +53,7 @@ Vaultwarden creates and migrates its own tables on first start.
 The `/admin` panel is protected by a token stored as an Argon2 hash:
 
 ```bash
-docker run --rm -it vaultwarden/server:1.37.3 /vaultwarden hash
+docker run --rm -it vaultwarden/server:1.37.4 /vaultwarden hash
 ```
 
 Type a long random token twice (store it in your password manager, since it's the admin login). The command prints a line like `ADMIN_TOKEN='$argon2id$v=19$...'`. Paste it into `.env` **with the single quotes**. The hash contains `$`, and without the quotes Compose would try to expand it.
@@ -204,7 +204,7 @@ As an extra, independent safety net, do an occasional **password-protected `.jso
 
 ## Upgrading
 
-The image is pinned (`vaultwarden/server:1.37.3`) because new versions run database migrations. To upgrade:
+The image is pinned (`vaultwarden/server:1.37.4`) because new versions run database migrations. To upgrade:
 
 1. Read the [release notes](https://github.com/dani-garcia/vaultwarden/releases).
 2. Run a backup: `docker compose exec backup /usr/local/bin/backup.sh` (in `backup/`).
