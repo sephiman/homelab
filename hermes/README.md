@@ -39,7 +39,7 @@ its own directories. Treat these as a seatbelt, not the wall.
 
 - **Wrapper actions are not prompted.** Hermes' approval prompt only fires on its built-in
   dangerous patterns; `sudo -n homelab-manage.sh restart media` doesn't match any. The agent's
-  instructions ([`SOUL.md`](./SOUL.md)) tell it to ask first, but the hard guarantee is only
+  instructions ([`AGENTS.md`](./AGENTS.md)) tell it to ask first, but the hard guarantee is only
   that the worst it can do is restart or update an existing Compose project (or the Docker
   daemon). That includes any app you deploy on the host, so live bots or anything with state
   you care about are in reach of a restart.
@@ -65,7 +65,7 @@ its own directories. Treat these as a seatbelt, not the wall.
 | `hermes-gateway.service` | `/etc/systemd/system/hermes-gateway.service` |
 | `config.yaml` | `/home/hermes/.hermes/config.yaml` (only if none exists yet) |
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
-| `SOUL.md` | `/home/hermes/.hermes/SOUL.md` — the agent's operating instructions, loaded into every session |
+| `AGENTS.md` | `/home/hermes/workspace/AGENTS.md` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
 ## Install

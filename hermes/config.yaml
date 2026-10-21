@@ -41,7 +41,7 @@ approvals:
     - '*.pgpass*'
 
 # A small model's background "self-improvement review" saved wrong conclusions about the wrapper
-# as skills/memory that then overrode SOUL.md. Hold every write for approval (`/memory pending`).
+# as skills/memory that then overrode AGENTS.md. Hold every write for approval (`/memory pending`).
 memory:
   write_approval: true
 skills:

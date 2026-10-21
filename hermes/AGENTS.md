@@ -37,10 +37,6 @@ You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you d
 Host health without sudo: `uptime`, `free -h`, `df -h`, `top -bn1 | head -20`, `sensors` (CPU
 temperatures), `systemctl status docker --no-pager`.
 
-These instructions are the source of truth for how to operate the host. Don't save its contents, or
-conclusions about what the wrapper can or can't do, as a skill or memory — they go stale when the
-wrapper changes.
-
 Postgres (read-only role, monitoring views): `psql service=homelab -c '<query>'`. Useful views:
 `pg_stat_activity`, `pg_locks`, `pg_stat_database`. Writes always fail — don't attempt them.
 
