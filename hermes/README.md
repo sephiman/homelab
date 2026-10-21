@@ -185,9 +185,13 @@ waits for your yes.
   command the bot in a group too. A group id there does nothing.
 - Optionally pin the bot to that group with `TELEGRAM_ALLOWED_CHATS=-100…` (see `.env.example`).
   Don't use `TELEGRAM_GROUP_ALLOWED_CHATS`: it authorizes every member of the group.
-- With BotFather's privacy mode on (the default) the bot only receives `/commands`, `@mentions`
-  and replies to its own messages — address it as `@yourbot …`. That also keeps other members'
-  chatter out of its context. If you change privacy mode, remove the bot and add it back.
+- With BotFather's privacy mode on (the default) Telegram delivers only `/commands@yourbot`,
+  replies to the bot and service messages — **not** `@mentions` or plain text. Make the bot a group
+  admin with every permission off (admins receive all messages; no need to re-add it), and set
+  `TELEGRAM_REQUIRE_MENTION=true` so Hermes answers only `@yourbot …` and replies to it.
+- Other members' messages then reach the gateway but are dropped (`Blocked unauthorized user` in
+  the journal) and don't enter the model's context.
+- Quick delivery test: `/help@yourbot` in the group answers even with privacy mode on.
 - Everyone in the group can read its replies (log excerpts, container names, DB stats).
 - After editing `hermes/.env`: `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
 
