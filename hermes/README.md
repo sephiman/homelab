@@ -186,9 +186,13 @@ waits for your yes.
 - Optionally pin the bot to that group with `TELEGRAM_ALLOWED_CHATS=-100…` (see `.env.example`).
   Don't use `TELEGRAM_GROUP_ALLOWED_CHATS`: it authorizes every member of the group.
 - With BotFather's privacy mode on (the default) Telegram delivers only `/commands@yourbot`,
-  replies to the bot and service messages — **not** `@mentions` or plain text. Make the bot a group
-  admin with every permission off (admins receive all messages; no need to re-add it), and set
-  `TELEGRAM_REQUIRE_MENTION=true` so Hermes answers only `@yourbot …` and replies to it.
+  replies to the bot and service messages — **not** `@mentions` or plain text, and the member list
+  says the bot "has no access to messages". Turn it off: @BotFather → `/setprivacy` → your bot →
+  Disable, then **remove the bot from the group and add it back** (the change only applies to
+  groups joined afterwards).
+- `TELEGRAM_REQUIRE_MENTION=false` (the default here) answers every message you send in the group;
+  `true` answers only `@yourbot …` and replies to it — useful if you also chat with people there,
+  since every message you send otherwise spends model requests.
 - Other members' messages then reach the gateway but are dropped (`Blocked unauthorized user` in
   the journal) and don't enter the model's context.
 - Quick delivery test: `/help@yourbot` in the group answers even with privacy mode on.
