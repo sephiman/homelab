@@ -1,9 +1,8 @@
-# Seeded into /home/hermes/.hermes/config.yaml by install-host.sh only when none exists.
-# After that, change the live copy (`sudo -iu hermes /home/hermes/.local/bin/hermes config set <key> <value>`) and
-# mirror the change here.
+# Installed as /etc/hermes/config.yaml, Hermes' managed config: every key here wins over
+# ~hermes/.hermes/config.yaml and can't be changed by the agent or `hermes config set`. Edit it here,
+# then `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
 
-# Any Hermes provider works; README "Choosing a model" lists options. Switch with `hermes model`
-# (sets provider + endpoint together) and put that provider's key in hermes/.env.
+# Any Hermes provider works; README "Choosing a model" lists options. Its key goes in LLM_API_KEY.
 model:
   default: nvidia/nemotron-3-ultra-550b-a55b:free
   provider: openrouter

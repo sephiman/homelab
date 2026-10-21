@@ -36,12 +36,12 @@ install_secret() {
   rm -f "$tmp"
 }
 
-# First `provider:` inside a top-level config section, read from the live config: `model` is the
-# primary (set by `hermes model`), `fallback_providers` the first fallback (`hermes fallback`).
+# First `provider:` inside a top-level section of hermes/config.yaml (pinned as the managed config):
+# `model` is the primary, `fallback_providers` the first fallback.
 configured_provider() {
   local section="$1"
   sed -n "/^$section:/,/^[^ #]/s/^ *-\{0,1\} *provider: *[\"']\{0,1\}\([a-z0-9:-]*\).*/\1/p" \
-    "$HERMES_HOME_DIR/.hermes/config.yaml" | head -n 1
+    "$SCRIPT_DIR/config.yaml" | head -n 1
 }
 
 # Prints PROVIDER_VAR=<value of generic_var> for the provider of a config section.
@@ -122,8 +122,11 @@ step "Installing /etc/sudoers.d/hermes"
 visudo -cf "$SCRIPT_DIR/hermes.sudoers"
 install -o root -g root -m 0440 "$SCRIPT_DIR/hermes.sudoers" /etc/sudoers.d/hermes
 
-step "Installing the egress firewall"
+step "Installing the managed config and the egress firewall"
 install -d -o root -g root -m 0755 /etc/hermes
+# Hermes' managed scope: every key here wins over ~hermes/.hermes/config.yaml, and root ownership
+# means neither the agent nor `hermes config set` can change it.
+install -o root -g root -m 0644 "$SCRIPT_DIR/config.yaml" /etc/hermes/config.yaml
 install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-egress.nft" /etc/hermes/hermes-egress.nft
 nft -c -f /etc/hermes/hermes-egress.nft
 install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-egress.service" /etc/systemd/system/hermes-egress.service
@@ -135,9 +138,6 @@ systemctl restart hermes-egress.service
 step "Preparing $HERMES_HOME_DIR"
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/workspace" "$HERMES_HOME_DIR/.hermes"
 install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HERMES_HOME_DIR/workspace/AGENTS.md"
-if [[ ! -f "$HERMES_HOME_DIR/.hermes/config.yaml" ]]; then
-  install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 "$SCRIPT_DIR/config.yaml" "$HERMES_HOME_DIR/.hermes/config.yaml"
-fi
 install_secret "$HERMES_HOME_DIR/.pg_service.conf" <<'EOF'
 [homelab]
 host=127.0.0.1

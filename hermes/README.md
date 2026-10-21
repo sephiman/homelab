@@ -30,7 +30,8 @@ dangerous-command checks on container backends.
 | `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`, reading table data | `hermes_ro` has no table grants; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` |
 | LAN, other host services, Docker networks | nftables egress rule for the `hermes` uid: DNS, `127.0.0.1:5432` and outbound 443 only |
 
-Hermes' own settings in [`config.yaml`](./config.yaml) add a second layer: `approvals.mode: manual`
+Hermes' own settings in [`config.yaml`](./config.yaml), installed root-owned as its managed config
+so the agent can't change them, add a second layer: `approvals.mode: manual`
 (you approve dangerous commands from Telegram), `deny` globs for Docker/firewall/secrets, no
 auto-approval in cron or one-shot sessions, and `HERMES_WRITE_SAFE_ROOT` limiting file writes to
 its own directories. Treat these as a seatbelt, not the wall.
@@ -63,7 +64,7 @@ its own directories. Treat these as a seatbelt, not the wall.
 | `hermes.sudoers` | `/etc/sudoers.d/hermes` |
 | `hermes-egress.nft`, `hermes-egress.service` | `/etc/hermes/hermes-egress.nft`, a oneshot unit that loads it at boot |
 | `hermes-gateway.service` | `/etc/systemd/system/hermes-gateway.service` |
-| `config.yaml` | `/home/hermes/.hermes/config.yaml` (only if none exists yet) |
+| `config.yaml` | `/etc/hermes/config.yaml` — Hermes' managed config (root-owned; wins over its own config) |
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
 | `AGENTS.md` | `/home/hermes/workspace/AGENTS.md` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
@@ -109,7 +110,7 @@ Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
 5. **Check the model and start the gateway:**
 
    ```bash
-   sudo -iu hermes /home/hermes/.local/bin/hermes model     # confirm the model id
+   sudo -iu hermes /home/hermes/.local/bin/hermes config    # managed keys from /etc/hermes/config.yaml
    sudo systemctl enable --now hermes-gateway
    journalctl -u hermes-gateway -f
    ```
@@ -143,7 +144,7 @@ Then from Telegram: message the bot from your account (it answers) and from anot
 Whatever model you use receives your logs, container names and DB stats, so its data terms matter
 as much as its price.
 
-| Provider (`hermes model` name) | Model id | Cost | Catch |
+| Provider (`model.provider`) | Model id | Cost | Catch |
 |---|---|---|---|
 | OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(default)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
 | Google Gemini (`gemini`) | `gemini-3.8-flash`, `gemini-2.5-flash` | Free tier | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
@@ -152,25 +153,25 @@ as much as its price.
 Prices and free tiers change; check [OpenRouter models](https://openrouter.ai/models?max_price=0),
 [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) and
 [OpenCode Zen](https://opencode.ai/docs/zen/). One OpenRouter key also covers paid models, so
-moving off a free model is just `hermes model`. Small models are weaker at multi-step tool use:
+moving off a free model is just a different model id. Small models are weaker at multi-step tool use:
 if the bot calls the wrapper wrongly or stops asking before restarts, try a stronger one.
 
-To switch (the key always goes in `LLM_API_KEY`, whatever the provider):
+To switch, edit `model:` in this folder's `config.yaml` (the key always goes in `LLM_API_KEY`):
 
 ```bash
-sudo -iu hermes /home/hermes/.local/bin/hermes model  # pick provider + model; skip its key prompt
+nano hermes/config.yaml                               # model.provider / model.default
 nano hermes/.env                                      # LLM_API_KEY=<that provider's key>
 sudo ./install-host.sh                                # from hermes/; prints which variable it used
 sudo systemctl restart hermes-gateway
 ```
 
-`install-host.sh` reads the provider from the live config and saves `LLM_API_KEY` as that
-provider's variable. It knows `opencode-zen`, `opencode-go`, `gemini`, `openrouter`, `anthropic`,
+`hermes model` / `hermes config set` refuse to change these keys: `config.yaml` is installed as
+Hermes' managed config (`/etc/hermes/config.yaml`). `install-host.sh` reads the provider from it
+and saves `LLM_API_KEY` as that provider's variable. It knows `opencode-zen`, `opencode-go`, `gemini`, `openrouter`, `anthropic`,
 `openai-api` and `deepseek`; for any other provider it stops and asks you to put the provider's own
 key variable in `hermes/.env` instead (any variable there is passed through as-is).
 
-Then mirror the choice in `config.yaml` here. `/model <id>` in Telegram switches only the current
-chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
+`/model <id>` in Telegram switches only the current chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
 egress firewall until you add a rule for it in `hermes-egress.nft`.
 
 ### Fallback model
@@ -187,10 +188,20 @@ Groq's free plan caps tokens per minute (8K on its docs) — a long Hermes reque
 the fallback answers 429 on tokens per minute, use Gemini instead (`provider: gemini`,
 `model: gemini-3.8-flash`, whose free tier is used to improve Google's products).
 
-Put the fallback provider's key in `FALLBACK_API_KEY`; `install-host.sh` maps it like
-`LLM_API_KEY`. The installer never edits the live `config.yaml`, so add the `providers:` and
-`fallback_providers:` blocks from this folder's `config.yaml` to
-`/home/hermes/.hermes/config.yaml` by hand.
+Change the fallback in this folder's `config.yaml` (`providers:` / `fallback_providers:`) and put
+its key in `FALLBACK_API_KEY`; `install-host.sh` maps it like `LLM_API_KEY`:
+
+```bash
+nano hermes/.env                                              # FALLBACK_API_KEY=<Groq key>
+sudo ./install-host.sh           # prints: FALLBACK_API_KEY -> GROQ_API_KEY (provider custom:groq)
+sudo systemctl restart hermes-gateway
+sudo -iu hermes /home/hermes/.local/bin/hermes fallback list
+```
+
+Don't use `hermes fallback add` / `hermes model` for this: besides the managed config winning,
+their custom-endpoint picker stores the key in a generated variable (e.g.
+`HERMES_CUSTOM_API_GROQ_COM_API_KEY`) in Hermes' own `.env`, which the next `install-host.sh` run
+wipes — the fallback then fails with `401 Invalid API Key`.
 
 ## Using it
 
@@ -231,8 +242,11 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO hermes_ro;
 
 - **Update Hermes:** `sudo -iu hermes /home/hermes/.local/bin/hermes update`, then
   `sudo systemctl restart hermes-gateway`.
-- **Changed a file in this folder:** run `sudo ./install-host.sh` again. It never overwrites the
-  live `config.yaml`; copy config changes by hand or with `hermes config set`.
+- **Changed a file in this folder:** run `sudo ./install-host.sh` again, then
+  `sudo systemctl restart hermes-gateway` (Hermes reads config and `.env` at startup). For
+  `AGENTS.md`, also `/new` in each chat.
+- **Settings:** `hermes config` shows which keys are managed. Keys not in `config.yaml` stay
+  editable with `hermes config set`; to pin one, add it to `config.yaml`.
 - **Rotate a secret:** edit `hermes/.env`, re-run `install-host.sh`, restart the gateway.
 - **Stop it now:** `sudo systemctl stop hermes-gateway` (or revoke the token in @BotFather).
 
