@@ -68,12 +68,16 @@ dir_owner() {
   stat -c %U "$1"
 }
 
+home_of() {
+  getent passwd "$1" | cut -d: -f6
+}
+
 # Compose files often interpolate ${HOME} for bind mounts, so run them with the owner's HOME, not root's.
 compose() {
   local project="$1"
   shift
   local owner_home
-  owner_home="$(getent passwd "$(dir_owner "$PROJECT_DIR")" | cut -d: -f6)"
+  owner_home="$(home_of "$(dir_owner "$PROJECT_DIR")")"
   local file_args=() files file
   IFS=',' read -ra files <<<"$CONFIG_FILES"
   for file in "${files[@]}"; do
@@ -83,14 +87,19 @@ compose() {
 }
 
 # git runs as the folder's owner so the checkout never gains root-owned files.
-git_pull() {
+# runuser instead of sudo: Ubuntu's sudo-rs doesn't take every flag classic sudo does.
+as_owner() {
   local owner
   owner="$(dir_owner "$PROJECT_DIR")"
-  if ! sudo -u "$owner" -H git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
+  runuser -u "$owner" -- env HOME="$(home_of "$owner")" "$@"
+}
+
+git_pull() {
+  if ! as_owner git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
     echo "not a git checkout, skipping git pull: $PROJECT_DIR"
     return 0
   fi
-  sudo -u "$owner" -H git -C "$PROJECT_DIR" pull --ff-only
+  as_owner git -C "$PROJECT_DIR" pull --ff-only
 }
 
 hold_lock() {

@@ -1,5 +1,5 @@
 # Seeded into /home/hermes/.hermes/config.yaml by install-host.sh only when none exists.
-# After that, change the live copy (`sudo -u hermes -H hermes config set <key> <value>`) and
+# After that, change the live copy (`sudo -u hermes /home/hermes/.local/bin/hermes config set <key> <value>`) and
 # mirror the change here.
 
 model:

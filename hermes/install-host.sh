@@ -15,6 +15,16 @@ die() {
   exit 1
 }
 
+# Writes stdin to a hermes-owned 0600 file. Goes through a private temp file because `install` from
+# /dev/stdin isn't reliable across coreutils implementations (Ubuntu 26.04 ships the Rust uutils).
+install_secret() {
+  local dest="$1" tmp
+  tmp="$(mktemp)"
+  cat >"$tmp"
+  install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 "$tmp" "$dest"
+  rm -f "$tmp"
+}
+
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"
 
 project_dirs() {
@@ -89,7 +99,7 @@ install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HE
 if [[ ! -f "$HERMES_HOME_DIR/.hermes/config.yaml" ]]; then
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 "$SCRIPT_DIR/config.yaml" "$HERMES_HOME_DIR/.hermes/config.yaml"
 fi
-install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 /dev/stdin "$HERMES_HOME_DIR/.pg_service.conf" <<'EOF'
+install_secret "$HERMES_HOME_DIR/.pg_service.conf" <<'EOF'
 [homelab]
 host=127.0.0.1
 port=5432
@@ -101,10 +111,8 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   step "Installing secrets from hermes/.env"
   db_password="$(sed -n 's/^HERMES_DB_RO_PASSWORD=//p' "$SCRIPT_DIR/.env")"
   [[ -n "$db_password" && "$db_password" != changeme ]] || die "set HERMES_DB_RO_PASSWORD in hermes/.env"
-  grep -v '^HERMES_DB_RO_PASSWORD=' "$SCRIPT_DIR/.env" |
-    install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 /dev/stdin "$HERMES_HOME_DIR/.hermes/.env"
-  printf '127.0.0.1:5432:*:hermes_ro:%s\n' "$db_password" |
-    install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 /dev/stdin "$HERMES_HOME_DIR/.pgpass"
+  grep -v '^HERMES_DB_RO_PASSWORD=' "$SCRIPT_DIR/.env" | install_secret "$HERMES_HOME_DIR/.hermes/.env"
+  printf '127.0.0.1:5432:*:hermes_ro:%s\n' "$db_password" | install_secret "$HERMES_HOME_DIR/.pgpass"
 else
   echo "hermes/.env not found: copy .env.example to .env, fill it in and run this script again."
 fi

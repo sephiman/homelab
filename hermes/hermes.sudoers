@@ -1,3 +1,2 @@
 # Installed as /etc/sudoers.d/hermes by install-host.sh. The wrapper validates every argument itself.
-Defaults:hermes !requiretty
 hermes ALL=(root) NOPASSWD: /usr/local/bin/homelab-manage.sh
