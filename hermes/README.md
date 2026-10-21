@@ -102,13 +102,13 @@ Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
    ```bash
    curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o /tmp/hermes-install.sh
    less /tmp/hermes-install.sh
-   sudo -u hermes bash /tmp/hermes-install.sh --non-interactive --skip-browser --skip-computer-use
+   sudo -iu hermes bash /tmp/hermes-install.sh --non-interactive --skip-browser --skip-computer-use
    ```
 
 5. **Check the model and start the gateway:**
 
    ```bash
-   sudo -u hermes /home/hermes/.local/bin/hermes model     # confirm the Gemini model id
+   sudo -iu hermes /home/hermes/.local/bin/hermes model     # confirm the Gemini model id
    sudo systemctl enable --now hermes-gateway
    journalctl -u hermes-gateway -f
    ```
@@ -121,17 +121,17 @@ Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
 Run these on the host after installing; each line says what you should see.
 
 ```bash
-sudo -u hermes docker ps                              # permission denied on the Docker socket
-sudo -u hermes sudo -n /usr/bin/id                    # "a password is required" — no other sudo
-sudo -u hermes sudo -n /usr/local/bin/homelab-manage.sh ps              # container table
-sudo -u hermes sudo -n /usr/local/bin/homelab-manage.sh restart foo     # no compose project 'foo'
-sudo -u hermes sudo -n /usr/local/bin/homelab-manage.sh inspect postgresdb | grep -i password  # nothing
-sudo -u hermes cat ~/postgres/.env                    # permission denied (adjust to your repo path)
-sudo -u hermes psql service=homelab -c 'select count(*) from pg_stat_activity'  # a number
-sudo -u hermes psql service=homelab -c 'create table t(x int)'      # read-only transaction error
-sudo -u hermes psql service=homelab -d vaultwarden -c 'select 1'    # permission denied for database
-sudo -u hermes curl -sS -m 5 http://192.168.1.1        # times out (LAN blocked)
-sudo -u hermes curl -sS -m 5 https://api.telegram.org  # responds
+sudo -iu hermes docker ps                              # permission denied on the Docker socket
+sudo -iu hermes sudo -n /usr/bin/id                    # "a password is required" — no other sudo
+sudo -iu hermes sudo -n /usr/local/bin/homelab-manage.sh ps              # container table
+sudo -iu hermes sudo -n /usr/local/bin/homelab-manage.sh restart foo     # no compose project 'foo'
+sudo -iu hermes sudo -n /usr/local/bin/homelab-manage.sh inspect postgresdb | grep -i password  # nothing
+sudo -iu hermes cat /home/juanjo/docker/homelab/postgres/.env  # permission denied (adjust to your repo path)
+sudo -iu hermes psql service=homelab -c 'select count(*) from pg_stat_activity'  # a number
+sudo -iu hermes psql service=homelab -c 'create table t(x int)'      # read-only transaction error
+sudo -iu hermes psql service=homelab -d vaultwarden -c 'select 1'    # permission denied for database
+sudo -iu hermes curl -sS -m 5 http://192.168.1.1        # times out (LAN blocked)
+sudo -iu hermes curl -sS -m 5 https://api.telegram.org  # responds
 ```
 
 Then from Telegram: message the bot from your account (it answers) and from another account
@@ -154,7 +154,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO hermes_ro;
 
 ## Maintenance
 
-- **Update Hermes:** `sudo -u hermes /home/hermes/.local/bin/hermes update`, then
+- **Update Hermes:** `sudo -iu hermes /home/hermes/.local/bin/hermes update`, then
   `sudo systemctl restart hermes-gateway`.
 - **Changed a file in this folder:** run `sudo ./install-host.sh` again. It never overwrites the
   live `config.yaml`; copy config changes by hand or with `hermes config set`.
