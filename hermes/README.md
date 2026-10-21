@@ -129,7 +129,7 @@ sudo -iu hermes sudo -n /usr/local/bin/homelab-manage.sh inspect postgresdb | gr
 sudo -iu hermes cat /home/juanjo/docker/homelab/postgres/.env  # permission denied (adjust to your repo path)
 sudo -iu hermes psql service=homelab -c 'select count(*) from pg_stat_activity'  # a number
 sudo -iu hermes psql service=homelab -c 'create table t(x int)'      # read-only transaction error
-sudo -iu hermes psql service=homelab -d vaultwarden -c 'select 1'    # permission denied for database
+sudo -iu hermes psql "service=homelab dbname=vaultwarden" -c 'select 1'  # permission denied for database
 sudo -iu hermes curl -sS -m 5 http://192.168.1.1        # times out (LAN blocked)
 sudo -iu hermes curl -sS -m 5 https://api.telegram.org  # responds
 ```
