@@ -1,7 +1,8 @@
 # Hermes Agent
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) as a Telegram ops assistant for this
-homelab, using Gemini as the model. It can look at containers, logs, host health and Postgres
+homelab. The model is your choice — any provider Hermes supports; see
+[Choosing a model](#choosing-a-model) for free options. It can look at containers, logs, host health and Postgres
 statistics, and restart or update the Docker Compose projects on the host — the stacks in this
 repo and any other app deployed there. Nothing more.
 
@@ -71,7 +72,7 @@ its own directories. Treat these as a seatbelt, not the wall.
 
 Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
 ([@BotFather](https://t.me/BotFather)), your numeric Telegram user id
-([@userinfobot](https://t.me/userinfobot)) and a Gemini API key with a spending cap.
+([@userinfobot](https://t.me/userinfobot)) and an API key for the model provider you pick ([Choosing a model](#choosing-a-model)).
 
 1. **Read-only database role** (pick a password):
 
@@ -108,7 +109,7 @@ Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
 5. **Check the model and start the gateway:**
 
    ```bash
-   sudo -iu hermes /home/hermes/.local/bin/hermes model     # confirm the Gemini model id
+   sudo -iu hermes /home/hermes/.local/bin/hermes model     # confirm the model id
    sudo systemctl enable --now hermes-gateway
    journalctl -u hermes-gateway -f
    ```
@@ -136,6 +137,43 @@ sudo -iu hermes curl -sS -m 5 https://api.telegram.org  # responds
 
 Then from Telegram: message the bot from your account (it answers) and from another account
 (silence).
+
+## Choosing a model
+
+Whatever model you use receives your logs, container names and DB stats, so its data terms matter
+as much as its price. Free options:
+
+| Provider (`hermes model` name) | Model id | Data | Catch |
+|---|---|---|---|
+| OpenCode Zen (`opencode-zen`) | `deepseek-v4.1-flash-free` *(default)*, `glm-5.3-flash-free`, `minimax-m3.1-flash-free` | Zero retention, not used for training | Free "for a limited time" — when one goes, pick another |
+| Google Gemini (`gemini`) | `gemini-3.8-flash` (strongest), `gemini-2.5-flash` | Free tier content **is used to improve Google's products** | Low quotas: an agent turn makes several calls, so it can run dry after a few questions |
+
+Avoid OpenCode's `big-pickle`, `exo-free`, `mimo-*` and `flint-40b-free` (your data may train the
+model) and `nemotron-*` (trial use, logged). Check [OpenCode Zen](https://opencode.ai/docs/zen/) and
+[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) for the current lists — free
+offers change.
+
+Small free models are weaker at multi-step tool use. If the bot calls the wrapper wrongly or stops
+asking before restarts, try another model; cheap paid ones (e.g. Zen's `glm-5.3-flash`, or a
+billed Gemini key) are the next step.
+
+To switch (the key always goes in `LLM_API_KEY`, whatever the provider):
+
+```bash
+sudo -iu hermes /home/hermes/.local/bin/hermes model  # pick provider + model; skip its key prompt
+nano hermes/.env                                      # LLM_API_KEY=<that provider's key>
+sudo ./install-host.sh                                # from hermes/; prints which variable it used
+sudo systemctl restart hermes-gateway
+```
+
+`install-host.sh` reads the provider from the live config and saves `LLM_API_KEY` as that
+provider's variable. It knows `opencode-zen`, `opencode-go`, `gemini`, `openrouter`, `anthropic`,
+`openai-api` and `deepseek`; for any other provider it stops and asks you to put the provider's own
+key variable in `hermes/.env` instead (any variable there is passed through as-is).
+
+Then mirror the choice in `config.yaml` here. `/model <id>` in Telegram switches only the current
+chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
+egress firewall until you add a rule for it in `hermes-egress.nft`.
 
 ## Using it
 

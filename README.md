@@ -16,7 +16,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 | [`vaultwarden/`](./vaultwarden) | Vaultwarden — self-hosted Bitwarden-compatible password manager | https://vault.<your-domain> (via Nginx Proxy Manager) |
 | [`home-automation/`](./home-automation) | Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker) | http://localhost:8123 |
 | [`backup/`](./backup) | Scheduled backups of service data + PostgreSQL, uploaded to Google Drive via rclone | — |
-| [`hermes/`](./hermes) | Hermes Agent — Telegram ops assistant (Gemini). Host install under a locked-down `hermes` user, not a compose stack | Telegram bot |
+| [`hermes/`](./hermes) | Hermes Agent — Telegram ops assistant (any LLM provider; free options in its README). Host install under a locked-down `hermes` user, not a compose stack | Telegram bot |
 
 Each stack's README covers its ports, volumes, first-run steps and gotchas.
 

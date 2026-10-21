@@ -8,6 +8,16 @@ readonly HERMES_USER=hermes
 readonly HERMES_HOME_DIR=/home/hermes
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HOMELAB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# hermes/.env holds one generic LLM_API_KEY; Hermes reads it from the provider's own variable.
+declare -rA PROVIDER_KEY_VARS=(
+  [opencode-zen]=OPENCODE_ZEN_API_KEY
+  [opencode-go]=OPENCODE_GO_API_KEY
+  [gemini]=GEMINI_API_KEY
+  [openrouter]=OPENROUTER_API_KEY
+  [anthropic]=ANTHROPIC_API_KEY
+  [openai-api]=OPENAI_API_KEY
+  [deepseek]=DEEPSEEK_API_KEY
+)
 
 step() { printf '\n==> %s\n' "$*"; }
 die() {
@@ -23,6 +33,25 @@ install_secret() {
   cat >"$tmp"
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 "$tmp" "$dest"
   rm -f "$tmp"
+}
+
+# The provider Hermes is set to (by `hermes model`), read from the live config.
+configured_provider() {
+  sed -n "/^model:/,/^[^ #]/s/^  provider: *[\"']\{0,1\}\([a-z0-9-]*\).*/\1/p" \
+    "$HERMES_HOME_DIR/.hermes/config.yaml" | head -n 1
+}
+
+# Prints the .env Hermes gets: hermes/.env minus the DB password, with LLM_API_KEY renamed.
+hermes_env() {
+  local llm_key provider key_var
+  llm_key="$(sed -n 's/^LLM_API_KEY=//p' "$SCRIPT_DIR/.env")"
+  grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' "$SCRIPT_DIR/.env" || true
+  [[ -n "$llm_key" ]] || return 0
+  provider="$(configured_provider)"
+  key_var="${PROVIDER_KEY_VARS[$provider]:-}"
+  [[ -n "$key_var" ]] || die "provider '$provider' has no LLM_API_KEY mapping: put its own key variable in hermes/.env (see the Hermes provider docs)"
+  echo "LLM_API_KEY -> $key_var (provider $provider)" >&2
+  printf '%s=%s\n' "$key_var" "$llm_key"
 }
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"
@@ -111,7 +140,9 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   step "Installing secrets from hermes/.env"
   db_password="$(sed -n 's/^HERMES_DB_RO_PASSWORD=//p' "$SCRIPT_DIR/.env")"
   [[ -n "$db_password" && "$db_password" != changeme ]] || die "set HERMES_DB_RO_PASSWORD in hermes/.env"
-  grep -v '^HERMES_DB_RO_PASSWORD=' "$SCRIPT_DIR/.env" | install_secret "$HERMES_HOME_DIR/.hermes/.env"
+  # Built first so an unmapped provider stops the script before the old .env is replaced.
+  env_content="$(hermes_env)"
+  printf '%s\n' "$env_content" | install_secret "$HERMES_HOME_DIR/.hermes/.env"
   printf '127.0.0.1:5432:*:hermes_ro:%s\n' "$db_password" | install_secret "$HERMES_HOME_DIR/.pgpass"
 else
   echo "hermes/.env not found: copy .env.example to .env, fill it in and run this script again."
