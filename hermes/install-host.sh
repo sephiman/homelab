@@ -124,7 +124,10 @@ systemctl restart hermes-egress.service
 
 step "Preparing $HERMES_HOME_DIR"
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/workspace" "$HERMES_HOME_DIR/.hermes"
-install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HERMES_HOME_DIR/workspace/AGENTS.md"
+# SOUL.md loads into every session regardless of working directory; a workspace AGENTS.md did not
+# reliably reach Telegram sessions.
+install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/SOUL.md" "$HERMES_HOME_DIR/.hermes/SOUL.md"
+rm -f "$HERMES_HOME_DIR/workspace/AGENTS.md"
 if [[ ! -f "$HERMES_HOME_DIR/.hermes/config.yaml" ]]; then
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 0600 "$SCRIPT_DIR/config.yaml" "$HERMES_HOME_DIR/.hermes/config.yaml"
 fi

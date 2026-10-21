@@ -40,5 +40,12 @@ approvals:
     - '*.env*'
     - '*.pgpass*'
 
+# A small model's background "self-improvement review" saved wrong conclusions about the wrapper
+# as skills/memory that then overrode SOUL.md. Hold every write for approval (`/memory pending`).
+memory:
+  write_approval: true
+skills:
+  write_approval: true
+
 # Strangers get silence, not a pairing code.
 unauthorized_dm_behavior: ignore
