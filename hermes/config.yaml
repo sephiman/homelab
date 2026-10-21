@@ -2,11 +2,11 @@
 # After that, change the live copy (`sudo -iu hermes /home/hermes/.local/bin/hermes config set <key> <value>`) and
 # mirror the change here.
 
-# Any Hermes provider works; README "Choosing a model" lists free options. Switch with `hermes model`
+# Any Hermes provider works; README "Choosing a model" lists options. Switch with `hermes model`
 # (sets provider + endpoint together) and put that provider's key in hermes/.env.
 model:
-  default: deepseek-v4.1-flash-free
-  provider: opencode-zen
+  default: nvidia/nemotron-3-ultra-550b-a55b:free
+  provider: openrouter
 
 terminal:
   backend: local

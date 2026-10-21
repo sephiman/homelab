@@ -141,21 +141,19 @@ Then from Telegram: message the bot from your account (it answers) and from anot
 ## Choosing a model
 
 Whatever model you use receives your logs, container names and DB stats, so its data terms matter
-as much as its price. Free options:
+as much as its price.
 
-| Provider (`hermes model` name) | Model id | Data | Catch |
+| Provider (`hermes model` name) | Model id | Cost | Catch |
 |---|---|---|---|
-| OpenCode Zen (`opencode-zen`) | `deepseek-v4.1-flash-free` *(default)*, `glm-5.3-flash-free`, `minimax-m3.1-flash-free` | Zero retention, not used for training | Free "for a limited time" — when one goes, pick another |
-| Google Gemini (`gemini`) | `gemini-3.8-flash` (strongest), `gemini-2.5-flash` | Free tier content **is used to improve Google's products** | Low quotas: an agent turn makes several calls, so it can run dry after a few questions |
+| OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(default)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
+| Google Gemini (`gemini`) | `gemini-3.8-flash`, `gemini-2.5-flash` | Free tier | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
+| OpenCode Zen (`opencode-zen`) | `glm-5.3-flash` | $0.15 / $0.50 per 1M tokens in/out, prepaid credit | Paid only from Hermes: Zen's `*-free` models answer `403 … can only be used from within OpenCode` |
 
-Avoid OpenCode's `big-pickle`, `exo-free`, `mimo-*` and `flint-40b-free` (your data may train the
-model) and `nemotron-*` (trial use, logged). Check [OpenCode Zen](https://opencode.ai/docs/zen/) and
-[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) for the current lists — free
-offers change.
-
-Small free models are weaker at multi-step tool use. If the bot calls the wrapper wrongly or stops
-asking before restarts, try another model; cheap paid ones (e.g. Zen's `glm-5.3-flash`, or a
-billed Gemini key) are the next step.
+Prices and free tiers change; check [OpenRouter models](https://openrouter.ai/models?max_price=0),
+[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) and
+[OpenCode Zen](https://opencode.ai/docs/zen/). One OpenRouter key also covers paid models, so
+moving off a free model is just `hermes model`. Small models are weaker at multi-step tool use:
+if the bot calls the wrapper wrongly or stops asking before restarts, try a stronger one.
 
 To switch (the key always goes in `LLM_API_KEY`, whatever the provider):
 
