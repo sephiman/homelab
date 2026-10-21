@@ -15,7 +15,7 @@ dangerous-command checks on container backends.
 
 | Allowed | How |
 |---------|-----|
-| Project list, container list, per-project status and logs, filtered `inspect`, `docker.service` journal | `sudo -n homelab-manage.sh <action>` — the only sudo rule `hermes` has |
+| Project list, container list, per-project status and logs, `git-status` (pending commits), filtered `inspect`, `docker.service` journal | `sudo -n homelab-manage.sh <action>` — the only sudo rule `hermes` has |
 | `restart` / `update` (git pull + pull + up --build) of any Compose project, `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
 | Postgres connections, locks and stats; listing tables | `hermes_ro` role: `pg_monitor`, read-only transactions, 15 s timeout, 3 connections |

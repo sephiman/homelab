@@ -28,6 +28,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
   inspect <container>          state, health, image, networks, ports, mounts (never env)
   journal [lines]              docker.service journal (default 100, max 500)
   restart <project>            docker compose restart
+  git-status <project>         branch, commits behind/ahead of the remote, last commits, local changes
   update  <project>            git pull --ff-only (if a git checkout), compose pull, up -d --build
   restart-docker               systemctl restart docker (restarts everything)
 EOF
@@ -94,12 +95,31 @@ as_owner() {
   runuser -u "$owner" -- env HOME="$(home_of "$owner")" "$@"
 }
 
+# Never wait for a password or passphrase prompt: nobody is there to answer it.
+owner_git() {
+  as_owner env GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' git -C "$PROJECT_DIR" "$@"
+}
+
+is_git_checkout() {
+  owner_git rev-parse --is-inside-work-tree &>/dev/null
+}
+
 git_pull() {
-  if ! as_owner git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
+  if ! is_git_checkout; then
     echo "not a git checkout, skipping git pull: $PROJECT_DIR"
     return 0
   fi
-  as_owner git -C "$PROJECT_DIR" pull --ff-only
+  owner_git pull --ff-only
+}
+
+git_status() {
+  is_git_checkout || die "not a git checkout: $PROJECT_DIR"
+  owner_git fetch --quiet || echo "warning: git fetch failed; remote state below may be stale"
+  owner_git status --short --branch
+  echo "--- last commits"
+  owner_git log --oneline --decorate -5
+  echo "--- incoming (not pulled yet)"
+  owner_git log --oneline 'HEAD..@{upstream}' 2>/dev/null || echo "no upstream branch configured"
 }
 
 hold_lock() {
@@ -148,6 +168,11 @@ case "$action" in
     resolve_project "$1"
     hold_lock
     compose "$1" restart
+    ;;
+  git-status)
+    [[ $# -eq 1 ]] || usage
+    resolve_project "$1"
+    git_status
     ;;
   update)
     [[ $# -eq 1 ]] || usage

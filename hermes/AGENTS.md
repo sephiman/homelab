@@ -18,6 +18,7 @@ sudo -n /usr/local/bin/homelab-manage.sh logs    <project> [lines]
 sudo -n /usr/local/bin/homelab-manage.sh inspect <container>
 sudo -n /usr/local/bin/homelab-manage.sh journal [lines]
 sudo -n /usr/local/bin/homelab-manage.sh restart <project>      # needs the user's explicit yes
+sudo -n /usr/local/bin/homelab-manage.sh git-status <project>   # pending commits, local changes
 sudo -n /usr/local/bin/homelab-manage.sh update  <project>      # needs the user's explicit yes
 sudo -n /usr/local/bin/homelab-manage.sh restart-docker         # needs the user's explicit yes; restarts everything
 ```
@@ -25,6 +26,13 @@ sudo -n /usr/local/bin/homelab-manage.sh restart-docker         # needs the user
 `<project>` is a Compose project name as shown by `projects` (e.g. `postgres`, `monitoring`,
 `media`). Start with `projects` or `ps` when you don't know the name. Anything the wrapper rejects
 is rejected on purpose; don't try to work around it.
+
+You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you don't need to:
+- "pull / deploy / rebuild / update X" → `update X`. It runs `git pull --ff-only` in the project's
+  git checkout as its owner, then `docker compose pull` and `up -d --build`.
+- "is X up to date? what changed?" → `git-status X` first; propose `update X` if commits are
+  incoming. If `update` fails on the git pull (local changes, diverged branch), report it — the
+  user fixes the checkout.
 
 Host health without sudo: `uptime`, `free -h`, `df -h`, `top -bn1 | head -20`,
 `systemctl status docker --no-pager`.
