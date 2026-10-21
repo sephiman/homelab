@@ -23,8 +23,8 @@ sudo -n /usr/local/bin/homelab-manage.sh update  <project>      # needs the user
 sudo -n /usr/local/bin/homelab-manage.sh restart-docker         # needs the user's explicit yes; restarts everything
 ```
 
-`<project>` is a Compose project name as shown by `projects` (e.g. `postgres`, `monitoring`,
-`media`). Start with `projects` or `ps` when you don't know the name. Anything the wrapper rejects
+`<project>` is a Compose project name exactly as shown by `projects` — names keep their hyphens
+(`crypto-ambush`, `home-automation`, `shared-ledger`). Run `projects` first when unsure. Anything the wrapper rejects
 is rejected on purpose; don't try to work around it.
 
 You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you don't need to:
@@ -34,8 +34,12 @@ You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you d
   incoming. If `update` fails on the git pull (local changes, diverged branch), report it — the
   user fixes the checkout.
 
-Host health without sudo: `uptime`, `free -h`, `df -h`, `top -bn1 | head -20`,
-`systemctl status docker --no-pager`.
+Host health without sudo: `uptime`, `free -h`, `df -h`, `top -bn1 | head -20`, `sensors` (CPU
+temperatures), `systemctl status docker --no-pager`.
+
+This file is the source of truth for how to operate the host. Don't save its contents, or
+conclusions about what the wrapper can or can't do, as a skill or memory — they go stale when the
+wrapper changes.
 
 Postgres (read-only role, monitoring views): `psql service=homelab -c '<query>'`. Useful views:
 `pg_stat_activity`, `pg_locks`, `pg_stat_database`. Writes always fail — don't attempt them.
