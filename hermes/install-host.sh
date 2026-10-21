@@ -16,7 +16,7 @@ die() {
 }
 
 # Writes stdin to a hermes-owned 0600 file. Goes through a private temp file because `install` from
-# /dev/stdin isn't reliable across coreutils implementations (Ubuntu 26.04 ships the Rust uutils).
+# /dev/stdin isn't reliable across coreutils implementations.
 install_secret() {
   local dest="$1" tmp
   tmp="$(mktemp)"
