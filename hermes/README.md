@@ -143,6 +143,18 @@ Talk to the bot in plain language: "¿qué contenedores están caídos?", "últi
 monitoring", "¿hay bloqueos en Postgres?", "actualiza media". It proposes a restart or update and
 waits for your yes.
 
+### In a Telegram group
+
+- Keep **your user id** in `TELEGRAM_ALLOWED_USERS`: it matches the sender, so it is what lets you
+  command the bot in a group too. A group id there does nothing.
+- Optionally pin the bot to that group with `TELEGRAM_ALLOWED_CHATS=-100…` (see `.env.example`).
+  Don't use `TELEGRAM_GROUP_ALLOWED_CHATS`: it authorizes every member of the group.
+- With BotFather's privacy mode on (the default) the bot only receives `/commands`, `@mentions`
+  and replies to its own messages — address it as `@yourbot …`. That also keeps other members'
+  chatter out of its context. If you change privacy mode, remove the bot and add it back.
+- Everyone in the group can read its replies (log excerpts, container names, DB stats).
+- After editing `hermes/.env`: `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
+
 To let it read the data of one specific database (beyond listing tables), grant it explicitly,
 the same way `grafana_ro.sql` does:
 
