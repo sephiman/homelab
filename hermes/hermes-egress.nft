@@ -1,0 +1,31 @@
+# Outbound policy for the hermes user only: DNS, local Postgres and HTTPS to the internet.
+# Its own table, so loading it never touches Docker's rules (no `flush ruleset` here).
+table inet hermes_egress
+delete table inet hermes_egress
+
+table inet hermes_egress {
+  chain output {
+    type filter hook output priority filter; policy accept;
+
+    meta skuid != "hermes" accept
+    ct state established,related accept
+
+    # systemd-resolved stub on loopback.
+    ip daddr 127.0.0.53 meta l4proto { tcp, udp } th dport 53 accept
+    # Postgres is published on 127.0.0.1:5432; with userland-proxy off, Docker DNATs it to a 172.x address.
+    ip daddr { 127.0.0.1, 172.16.0.0/12 } tcp dport 5432 accept
+
+    # Hermes talks to its own gateway over loopback on kernel-assigned (ephemeral) ports; homelab
+    # services publish below that range, so the rest of loopback stays closed.
+    oifname "lo" tcp dport 32768-60999 accept
+
+    # Nothing else on this host, the LAN or the Docker networks.
+    oifname "lo" counter drop
+    ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10 } counter drop
+    ip6 daddr { fc00::/7, fe80::/10 } counter drop
+
+    # Gemini and Telegram APIs (and the Hermes installer/updater).
+    tcp dport 443 accept
+    counter drop
+  }
+}

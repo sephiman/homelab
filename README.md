@@ -16,6 +16,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 | [`vaultwarden/`](./vaultwarden) | Vaultwarden — self-hosted Bitwarden-compatible password manager | https://vault.<your-domain> (via Nginx Proxy Manager) |
 | [`home-automation/`](./home-automation) | Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker) | http://localhost:8123 |
 | [`backup/`](./backup) | Scheduled backups of service data + PostgreSQL, uploaded to Google Drive via rclone | — |
+| [`hermes/`](./hermes) | Hermes Agent — Telegram ops assistant (Gemini). Host install under a locked-down `hermes` user, not a compose stack | Telegram bot |
 
 Each stack's README covers its ports, volumes, first-run steps and gotchas.
 
@@ -84,12 +85,14 @@ cp .env.example .env
 4. `monitoring` — observability and Docker management.
 5. `media` / `remote` / `home-automation` / `vaultwarden` — application stacks.
 6. `backup` — after the data stacks exist, so there is something to back up.
+7. `hermes` — last, once the stacks it manages exist.
 
 ## Security posture
 
 - Only Nginx Proxy Manager (80/443) and RustDesk are meant to face the internet; everything else stays on the LAN or behind the proxy.
 - Postgres is bound to `127.0.0.1` — reachable from the host and from containers on `all_dockers`, never from the LAN.
 - Secrets live in per-stack `.env` files (gitignored); tokens mounted into containers (e.g. `monitoring/prometheus/ha_token`) are gitignored too.
+- Hermes Agent has no Docker access: it runs as an unprivileged user whose only sudo rule is a wrapper limited to status, logs, restart and update of the Compose projects on the host (see [hermes/README.md](./hermes/README.md)).
 - Prometheus reaches the Docker API through a read-only [socket proxy](https://github.com/Tecnativa/docker-socket-proxy) instead of mounting `/var/run/docker.sock` directly.
 
 ## License

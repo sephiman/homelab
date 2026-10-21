@@ -1,0 +1,13 @@
+[Unit]
+Description=Egress firewall for the hermes user
+Wants=network-pre.target
+Before=network-pre.target hermes-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/hermes/hermes-egress.nft
+ExecStop=/usr/sbin/nft delete table inet hermes_egress
+
+[Install]
+WantedBy=multi-user.target

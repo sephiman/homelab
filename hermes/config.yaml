@@ -1,0 +1,43 @@
+# Seeded into /home/hermes/.hermes/config.yaml by install-host.sh only when none exists.
+# After that, change the live copy (`sudo -u hermes -H hermes config set <key> <value>`) and
+# mirror the change here.
+
+model:
+  default: gemini-3.8-flash
+  provider: gemini
+  base_url: https://generativelanguage.googleapis.com/v1beta
+
+terminal:
+  backend: local
+  cwd: /home/hermes/workspace
+  timeout: 180
+
+approvals:
+  # manual: you approve every dangerous command from Telegram; `smart` would let an LLM approve.
+  mode: manual
+  timeout: 300
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+  # Backstop only: the real limits are the user, sudoers and file permissions (see README).
+  deny:
+    - 'docker *'
+    - 'docker-compose *'
+    - 'podman *'
+    - '*prune*'
+    - 'rm -rf *'
+    - 'rm -fr *'
+    - 'iptables*'
+    - 'ip6tables*'
+    - 'nft *'
+    - 'ufw *'
+    - 'crontab *'
+    - 'su *'
+    - 'sudo -i*'
+    - 'sudo -s*'
+    - 'sudo su*'
+    - '*.env*'
+    - '*.pgpass*'
+
+# Strangers get silence, not a pairing code.
+unauthorized_dm_behavior: ignore
