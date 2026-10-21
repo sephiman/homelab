@@ -173,6 +173,25 @@ Then mirror the choice in `config.yaml` here. `/model <id>` in Telegram switches
 chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
 egress firewall until you add a rule for it in `hermes-egress.nft`.
 
+### Fallback model
+
+When the primary fails (rate limit, outage), Hermes switches to the first entry of
+`fallback_providers` in `config.yaml` and goes back to the primary once its limit resets. The
+default is Groq `openai/gpt-oss-120b`: no retention by default (Zero Data Retention can be switched
+on in Groq's data controls) and ~1,000 free requests/day. Groq isn't built into Hermes, so
+`config.yaml` declares it under `providers:` and the fallback uses `custom:groq`.
+
+The fallback must be a **different provider**: OpenRouter's free limit (`free-models-per-day`: 50
+requests, or 1,000 after buying 10 credits once) is per account, so no other `:free` model helps.
+Groq's free plan caps tokens per minute (8K on its docs) — a long Hermes request can hit that; if
+the fallback answers 429 on tokens per minute, use Gemini instead (`provider: gemini`,
+`model: gemini-3.8-flash`, whose free tier is used to improve Google's products).
+
+Put the fallback provider's key in `FALLBACK_API_KEY`; `install-host.sh` maps it like
+`LLM_API_KEY`. The installer never edits the live `config.yaml`, so add the `providers:` and
+`fallback_providers:` blocks from this folder's `config.yaml` to
+`/home/hermes/.hermes/config.yaml` by hand.
+
 ## Using it
 
 Talk to the bot in plain language: "¿qué contenedores están caídos?", "últimos 200 logs de

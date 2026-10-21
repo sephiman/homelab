@@ -17,6 +17,7 @@ declare -rA PROVIDER_KEY_VARS=(
   [anthropic]=ANTHROPIC_API_KEY
   [openai-api]=OPENAI_API_KEY
   [deepseek]=DEEPSEEK_API_KEY
+  [custom:groq]=GROQ_API_KEY
 )
 
 step() { printf '\n==> %s\n' "$*"; }
@@ -35,23 +36,32 @@ install_secret() {
   rm -f "$tmp"
 }
 
-# The provider Hermes is set to (by `hermes model`), read from the live config.
+# First `provider:` inside a top-level config section, read from the live config: `model` is the
+# primary (set by `hermes model`), `fallback_providers` the first fallback (`hermes fallback`).
 configured_provider() {
-  sed -n "/^model:/,/^[^ #]/s/^  provider: *[\"']\{0,1\}\([a-z0-9-]*\).*/\1/p" \
+  local section="$1"
+  sed -n "/^$section:/,/^[^ #]/s/^ *-\{0,1\} *provider: *[\"']\{0,1\}\([a-z0-9:-]*\).*/\1/p" \
     "$HERMES_HOME_DIR/.hermes/config.yaml" | head -n 1
 }
 
-# Prints the .env Hermes gets: hermes/.env minus the DB password, with LLM_API_KEY renamed.
-hermes_env() {
-  local llm_key provider key_var
-  llm_key="$(sed -n 's/^LLM_API_KEY=//p' "$SCRIPT_DIR/.env")"
-  grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' "$SCRIPT_DIR/.env" || true
-  [[ -n "$llm_key" ]] || return 0
-  provider="$(configured_provider)"
+# Prints PROVIDER_VAR=<value of generic_var> for the provider of a config section.
+provider_key_line() {
+  local generic_var="$1" section="$2" value provider key_var
+  value="$(sed -n "s/^$generic_var=//p" "$SCRIPT_DIR/.env")"
+  [[ -n "$value" ]] || return 0
+  provider="$(configured_provider "$section")"
+  [[ -n "$provider" ]] || die "$generic_var is set but config.yaml has no $section provider"
   key_var="${PROVIDER_KEY_VARS[$provider]:-}"
-  [[ -n "$key_var" ]] || die "provider '$provider' has no LLM_API_KEY mapping: put its own key variable in hermes/.env (see the Hermes provider docs)"
-  echo "LLM_API_KEY -> $key_var (provider $provider)" >&2
-  printf '%s=%s\n' "$key_var" "$llm_key"
+  [[ -n "$key_var" ]] || die "provider '$provider' has no $generic_var mapping: put its own key variable in hermes/.env (see the Hermes provider docs)"
+  echo "$generic_var -> $key_var (provider $provider)" >&2
+  printf '%s=%s\n' "$key_var" "$value"
+}
+
+# Prints the .env Hermes gets: hermes/.env minus the DB password, with the generic keys renamed.
+hermes_env() {
+  grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' -e '^FALLBACK_API_KEY=' "$SCRIPT_DIR/.env" || true
+  provider_key_line LLM_API_KEY model
+  provider_key_line FALLBACK_API_KEY fallback_providers
 }
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"
