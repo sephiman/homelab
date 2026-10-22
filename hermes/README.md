@@ -178,30 +178,28 @@ egress firewall until you add a rule for it in `hermes-egress.nft`.
 
 When the primary fails (rate limit, outage), Hermes switches to the first entry of
 `fallback_providers` in `config.yaml` and goes back to the primary once its limit resets. The
-default is Groq `openai/gpt-oss-120b`: no retention by default (Zero Data Retention can be switched
-on in Groq's data controls) and ~1,000 free requests/day. Groq isn't built into Hermes, so
-`config.yaml` declares it under `providers:` and the fallback uses `custom:groq`.
+default is Gemini `gemini-3.5-flash-lite` on Google's free tier: fast and cheap on quota, with a
+context large enough for Hermes' requests — but free-tier content **is used to improve Google's
+products**, so your logs reach Google while the fallback is active.
 
 The fallback must be a **different provider**: OpenRouter's free limit (`free-models-per-day`: 50
 requests, or 1,000 after buying 10 credits once) is per account, so no other `:free` model helps.
-Groq's free plan caps tokens per minute (8K on its docs) — a long Hermes request can hit that; if
-the fallback answers 429 on tokens per minute, use Gemini instead (`provider: gemini`,
-`model: gemini-3.8-flash`, whose free tier is used to improve Google's products).
+Groq's free plan doesn't work either: its tokens-per-minute cap is smaller than a single Hermes
+request, which fails with `413 Request payload too large`.
 
-Change the fallback in this folder's `config.yaml` (`providers:` / `fallback_providers:`) and put
-its key in `FALLBACK_API_KEY`; `install-host.sh` maps it like `LLM_API_KEY`:
+Change the fallback in this folder's `config.yaml` (`fallback_providers:`) and put its key in
+`FALLBACK_API_KEY`; `install-host.sh` maps it like `LLM_API_KEY`:
 
 ```bash
-nano hermes/.env                                              # FALLBACK_API_KEY=<Groq key>
-sudo ./install-host.sh           # prints: FALLBACK_API_KEY -> GROQ_API_KEY (provider custom:groq)
+nano hermes/.env                                              # FALLBACK_API_KEY=<Gemini key>
+sudo ./install-host.sh           # prints: FALLBACK_API_KEY -> GEMINI_API_KEY (provider gemini)
 sudo systemctl restart hermes-gateway
 sudo -iu hermes /home/hermes/.local/bin/hermes fallback list
 ```
 
-Don't use `hermes fallback add` / `hermes model` for this: besides the managed config winning,
-their custom-endpoint picker stores the key in a generated variable (e.g.
-`HERMES_CUSTOM_API_GROQ_COM_API_KEY`) in Hermes' own `.env`, which the next `install-host.sh` run
-wipes — the fallback then fails with `401 Invalid API Key`.
+Don't use `hermes fallback add` / `hermes model` for this: the managed config wins anyway, and their
+custom-endpoint picker stores keys in generated variables in Hermes' own `.env`, which the next
+`install-host.sh` run wipes.
 
 ## Using it
 

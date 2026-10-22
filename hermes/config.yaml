@@ -48,8 +48,8 @@ providers:
 # Used when the primary fails (e.g. OpenRouter's per-account free-models-per-day limit, which no
 # other OpenRouter :free model escapes). Its key goes in FALLBACK_API_KEY.
 fallback_providers:
-  - provider: custom:groq
-    model: openai/gpt-oss-120b
+  - provider: gemini
+    model: gemini-3.5-flash-lite
 
 # A small model's background "self-improvement review" saved wrong conclusions about the wrapper
 # as skills/memory that then overrode AGENTS.md. Hold every write for approval (`/memory pending`).
