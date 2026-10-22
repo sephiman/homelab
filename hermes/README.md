@@ -18,6 +18,7 @@ dangerous-command checks on container backends.
 | Project list, container list, per-project status and logs, `git-status` (pending commits), filtered `inspect`, `docker.service` journal | `sudo -n homelab-manage.sh <action>` — the only sudo rule `hermes` has |
 | `restart` / `update` (git pull + pull + up --build) of any Compose project, `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
+| Home Assistant: entity states (`ha-states`, `ha-state`), logbook (`ha-logbook`), automations (`ha-automations`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs and GPS coordinates are filtered out |
 | Postgres connections, locks and stats; listing tables | `hermes_ro` role: `pg_monitor`, read-only transactions, 15 s timeout, 3 connections |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
@@ -139,6 +140,31 @@ sudo -iu hermes curl -sS -m 5 https://api.telegram.org  # responds
 Then from Telegram: message the bot from your account (it answers) and from another account
 (silence).
 
+## Home Assistant
+
+Hermes can read entity states ("¿está encendida la luz del salón?", "temperature in the
+bedroom?"), read the logbook (what changed when, and what caused it), check automations and the
+Home Assistant log for problems, and switch **lights** on or
+off. It can't touch other devices, automations or configuration. A Home Assistant token can do far
+more than that, so it never reaches Hermes: `install-host.sh` stores it root-only in
+`/etc/homelab-manage/ha_auth_header`, and only the wrapper uses it — reads, plus
+`light.turn_on` / `turn_off` / `toggle` on `light.*` entities. The log comes from the
+`homeassistant` container's output (`docker logs`), since the compose file discards the log file.
+
+1. In Home Assistant, create a user `hermes` (Settings → People → Users; **not** an administrator).
+   Log in as it, open its profile → Security → **Long-lived access tokens** → Create token.
+2. Put it in `hermes/.env` as `HA_TOKEN=…`, then:
+   ```bash
+   sudo ./install-host.sh && sudo systemctl restart hermes-gateway
+   sudo -iu hermes sudo -n /usr/local/bin/homelab-manage.sh ha-states light
+   ```
+3. `/new` in each chat so the agent sees the new actions.
+
+The non-admin user limits what the token could do if it ever leaked (no configuration changes),
+but it could still switch any device — which is why it stays root-only. Lights that Home Assistant
+exposes as `switch.*` (smart plugs) aren't covered; add their domain to `ha-light` only if you
+want them switchable.
+
 ## Choosing a model
 
 Whatever model you use receives your logs, container names and DB stats, so its data terms matter
@@ -254,7 +280,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO hermes_ro;
 sudo systemctl disable --now hermes-gateway hermes-egress
 sudo rm /etc/systemd/system/hermes-{gateway,egress}.service /etc/sudoers.d/hermes \
   /usr/local/bin/homelab-manage.sh
-sudo rm -r /etc/hermes
+sudo rm -r /etc/hermes /etc/homelab-manage
 sudo systemctl daemon-reload
 sudo userdel -r hermes
 docker exec -it postgresdb psql -U root -d postgres -c 'DROP ROLE hermes_ro'

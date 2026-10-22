@@ -6,6 +6,15 @@ set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 readonly DEFAULT_LINES=100
+readonly HA_URL=http://127.0.0.1:8123
+readonly HA_CONTAINER=homeassistant
+readonly DEFAULT_LOGBOOK_HOURS=24
+readonly MAX_LOGBOOK_HOURS=168
+# Full "Authorization: Bearer …" line, root-only, passed to curl as a file so the token never
+# shows up in a process list.
+readonly HA_AUTH_HEADER_FILE=/etc/homelab-manage/ha_auth_header
+# Attributes that can carry secrets or the home's location never leave the wrapper.
+readonly HA_HIDDEN_ATTRIBUTES='token|password|secret|key|picture|latitude|longitude|gps'
 readonly MAX_LINES=500
 # Fixed template so `inspect` never prints Config.Env (passwords, tokens, DATABASE_URL).
 readonly INSPECT_FORMAT='{{.Name}}
@@ -31,6 +40,12 @@ usage: sudo -n homelab-manage.sh <action> [args]
   git-status <project>         branch, commits behind/ahead of the remote, last commits, local changes
   update  <project>            git pull --ff-only (if a git checkout), compose pull, up -d --build
   restart-docker               systemctl restart docker (restarts everything)
+  ha-states [domain]           Home Assistant entities with state (optionally one domain: light, sensor…)
+  ha-state <entity_id>         one Home Assistant entity with its attributes (secrets/location hidden)
+  ha-automations               automations: state, last triggered, name (spot off/unavailable ones)
+  ha-log [lines]               Home Assistant container log (default 100, max 500)
+  ha-logbook [hours] [entity_id]   what changed when and what caused it (default 24h, max 168h; last 500)
+  ha-light <on|off|toggle> <light.entity>   switch a light — the only Home Assistant write allowed
 EOF
   exit 2
 }
@@ -122,6 +137,66 @@ git_status() {
   owner_git log --oneline 'HEAD..@{upstream}' 2>/dev/null || echo "no upstream branch configured"
 }
 
+require_ha_token() {
+  [[ -r "$HA_AUTH_HEADER_FILE" ]] || die "Home Assistant access not configured (HA_TOKEN in hermes/.env)"
+}
+
+ha_get() {
+  require_ha_token
+  curl -fsS --max-time 15 -H "@$HA_AUTH_HEADER_FILE" "$HA_URL/api/$1"
+}
+
+# The only Home Assistant service the wrapper ever calls; the entity is validated as light.* first.
+ha_light() {
+  local action="$1" entity="$2"
+  require_ha_token
+  curl -fsS --max-time 15 -X POST -H "@$HA_AUTH_HEADER_FILE" -H 'Content-Type: application/json' \
+    -d "$(jq -n --arg entity "$entity" '{entity_id: $entity}')" \
+    "$HA_URL/api/services/light/$action" >/dev/null
+  ha_get "states/$entity" | jq -r '"\(.entity_id): \(.state)"'
+}
+
+# Timestamps come from jq rather than `date -d`, whose relative-date parsing differs between GNU
+# coreutils and the uutils that Ubuntu 26.04 ships.
+ha_logbook() {
+  local hours="$1" entity="$2" start end query
+  start="$(jq -rn --argjson hours "$hours" 'now - $hours * 3600 | strftime("%Y-%m-%dT%H:%M:%SZ")')"
+  end="$(jq -rn 'now | strftime("%Y-%m-%dT%H:%M:%SZ")')"
+  query="end_time=$end"
+  if [[ -n "$entity" ]]; then
+    query+="&entity=$entity"
+  fi
+  ha_get "logbook/$start?$query" | jq -r '
+    .[]
+    | [.when, (.entity_id // ""), (.state // .message // ""), (.name // ""),
+       ("by: " + (.context_name // .context_entity_id // .context_event_type // "-"))]
+    | @tsv' | tail -n "$MAX_LINES"
+}
+
+ha_automations() {
+  ha_get states | jq -r '
+    .[]
+    | select(.entity_id | startswith("automation."))
+    | [.entity_id, .state, (.attributes.last_triggered // "never"), (.attributes.friendly_name // "")]
+    | @tsv' | sort
+}
+
+ha_states() {
+  local domain="$1"
+  ha_get states | jq -r --arg domain "$domain" '
+    .[]
+    | select($domain == "" or (.entity_id | startswith($domain + ".")))
+    | [.entity_id, .state, (.attributes.unit_of_measurement // ""), (.attributes.friendly_name // "")]
+    | @tsv' | sort
+}
+
+ha_state() {
+  ha_get "states/$1" | jq --arg hidden "$HA_HIDDEN_ATTRIBUTES" '{
+    entity_id, state, last_changed,
+    attributes: (.attributes | with_entries(select(.key | test($hidden; "i") | not)))
+  }'
+}
+
 hold_lock() {
   exec 9>/run/homelab-manage.lock
   flock -w 600 9 || die "another restart/update is still running"
@@ -186,6 +261,46 @@ case "$action" in
     [[ $# -eq 0 ]] || usage
     hold_lock
     systemctl restart docker.service
+    ;;
+  ha-states)
+    [[ $# -le 1 ]] || usage
+    [[ "${1:-}" =~ ^[a-z_]*$ ]] || die "invalid domain"
+    ha_states "${1:-}"
+    ;;
+  ha-state)
+    [[ $# -eq 1 ]] || usage
+    [[ "$1" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
+    ha_state "$1"
+    ;;
+  ha-automations)
+    [[ $# -eq 0 ]] || usage
+    ha_automations
+    ;;
+  ha-log)
+    [[ $# -le 1 ]] || usage
+    lines="$(line_count "${1:-}")"
+    docker logs --timestamps --tail "$lines" "$HA_CONTAINER" 2>&1
+    ;;
+  ha-logbook)
+    [[ $# -le 2 ]] || usage
+    hours="${1:-$DEFAULT_LOGBOOK_HOURS}"
+    [[ "$hours" =~ ^[0-9]{1,3}$ && "$hours" -ge 1 ]] || die "hours must be a number"
+    if (( hours > MAX_LOGBOOK_HOURS )); then
+      hours=$MAX_LOGBOOK_HOURS
+    fi
+    [[ -z "${2:-}" || "$2" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
+    ha_logbook "$hours" "${2:-}"
+    ;;
+  ha-light)
+    [[ $# -eq 2 ]] || usage
+    case "$1" in
+      on) service=turn_on ;;
+      off) service=turn_off ;;
+      toggle) service=toggle ;;
+      *) die "light action must be on, off or toggle" ;;
+    esac
+    [[ "$2" =~ ^light\.[a-z0-9_]+$ ]] || die "only light.* entities can be switched"
+    ha_light "$service" "$2"
     ;;
   *)
     usage

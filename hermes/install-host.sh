@@ -59,9 +59,27 @@ provider_key_line() {
 
 # Prints the .env Hermes gets: hermes/.env minus the DB password, with the generic keys renamed.
 hermes_env() {
-  grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' -e '^FALLBACK_API_KEY=' "$SCRIPT_DIR/.env" || true
+  grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' -e '^FALLBACK_API_KEY=' -e '^HA_TOKEN=' \
+    "$SCRIPT_DIR/.env" || true
   provider_key_line LLM_API_KEY model
   provider_key_line FALLBACK_API_KEY fallback_providers
+}
+
+# HA_TOKEN goes root-only to the wrapper, never to Hermes' .env: a Home Assistant token can also
+# switch devices, and the wrapper only ever reads with it.
+install_ha_token() {
+  local token
+  token="$(sed -n 's/^HA_TOKEN=//p' "$SCRIPT_DIR/.env")"
+  if [[ -z "$token" || "$token" == changeme ]]; then
+    echo "HA_TOKEN not set: Home Assistant actions stay disabled"
+    return 0
+  fi
+  install -d -o root -g root -m 0700 /etc/homelab-manage
+  local tmp
+  tmp="$(mktemp)"
+  printf 'Authorization: Bearer %s\n' "$token" >"$tmp"
+  install -o root -g root -m 0600 "$tmp" /etc/homelab-manage/ha_auth_header
+  rm -f "$tmp"
 }
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"
@@ -92,7 +110,7 @@ while read -r home; do
 done < <(owner_homes)
 
 step "Installing packages"
-apt-get install -y --no-install-recommends nftables postgresql-client git curl
+apt-get install -y --no-install-recommends nftables postgresql-client git curl jq
 
 step "Creating user $HERMES_USER"
 if ! id "$HERMES_USER" &>/dev/null; then
@@ -154,6 +172,7 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   env_content="$(hermes_env)"
   printf '%s\n' "$env_content" | install_secret "$HERMES_HOME_DIR/.hermes/.env"
   printf '127.0.0.1:5432:*:hermes_ro:%s\n' "$db_password" | install_secret "$HERMES_HOME_DIR/.pgpass"
+  install_ha_token
 else
   echo "hermes/.env not found: copy .env.example to .env, fill it in and run this script again."
 fi

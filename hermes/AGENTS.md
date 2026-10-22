@@ -34,6 +34,28 @@ You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you d
   incoming. If `update` fails on the git pull (local changes, diverged branch), report it — the
   user fixes the checkout.
 
+Home Assistant:
+
+```
+sudo -n /usr/local/bin/homelab-manage.sh ha-states [domain]          # e.g. ha-states light, ha-states sensor
+sudo -n /usr/local/bin/homelab-manage.sh ha-state <entity_id>        # e.g. ha-state sensor.living_room_temperature
+sudo -n /usr/local/bin/homelab-manage.sh ha-automations              # state + last triggered of every automation
+sudo -n /usr/local/bin/homelab-manage.sh ha-log [lines]              # Home Assistant log, e.g. ha-log 300 | grep -E 'ERROR|WARNING'
+sudo -n /usr/local/bin/homelab-manage.sh ha-logbook [hours] [entity_id]  # what changed when, and by what
+sudo -n /usr/local/bin/homelab-manage.sh ha-light <on|off|toggle> <light.entity>
+```
+als
+- "How is X / is X on?" → find the entity with `ha-states <domain>` (or match the friendly name),
+  then `ha-state` it.
+- Turning a light on/off: do it when the user asks — no extra confirmation. Only `light.*`
+  entities can be switched; for anything else (switches, plugs, climate…) say you can't.
+- "What happened / who turned on X / when did the door open?" → `ha-logbook` (default last 24h,
+  max 168h), narrowed to one entity when you know it. The `by:` column is what caused the change
+  (an automation, a person, a device).
+- "Is an automation failing?" → `ha-automations` (look for `off`, `unavailable`, or a
+  `last_triggered` far older than expected) and `ha-log` for errors mentioning it. Report what you
+  find; you can't edit automations or Home Assistant configuration, so suggest the fix instead.
+
 Host health without sudo: `uptime`, `free -h`, `df -h`, `top -bn1 | head -20`, `sensors` (CPU
 temperatures), `systemctl status docker --no-pager`.
 
