@@ -88,21 +88,21 @@ home_of() {
   getent passwd "$1" | cut -d: -f6
 }
 
-# Compose files often interpolate ${HOME} for bind mounts, so run them with the owner's HOME, not root's.
+# Runs as the project folder's owner (who must be in the docker group): compose files interpolate
+# ${HOME} for bind mounts, and as root with the owner's HOME, buildx left root-owned files in the
+# owner's ~/.docker that broke their own `docker compose build`.
 compose() {
   local project="$1"
   shift
-  local owner_home
-  owner_home="$(home_of "$(dir_owner "$PROJECT_DIR")")"
   local file_args=() files file
   IFS=',' read -ra files <<<"$CONFIG_FILES"
   for file in "${files[@]}"; do
     file_args+=(--file "$file")
   done
-  (cd "$PROJECT_DIR" && HOME="$owner_home" docker compose --project-name "$project" "${file_args[@]}" "$@")
+  (cd "$PROJECT_DIR" && as_owner docker compose --project-name "$project" "${file_args[@]}" "$@")
 }
 
-# git runs as the folder's owner so the checkout never gains root-owned files.
+# git and compose run as the folder's owner so nothing they write ends up root-owned.
 # runuser instead of sudo: Ubuntu's sudo-rs doesn't take every flag classic sudo does.
 as_owner() {
   local owner

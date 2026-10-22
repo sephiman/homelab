@@ -50,6 +50,9 @@ its own directories. Treat these as a seatbelt, not the wall.
 - **`update` pulls the whole git checkout** the project lives in (`git pull --ff-only` as the
   folder's owner; skipped if it isn't a checkout), then rebuilds that one project. Hermes cannot
   push or edit any checkout — it cannot even read them.
+- **Compose runs as the project folder's owner**, who must be in the `docker` group (you are, if you
+  run `docker compose` without sudo). That keeps everything it writes — `~/.docker/buildx`, build
+  output — owned by you, and uses your registry logins.
 - **Only projects that have containers are reachable.** The folder comes from the labels Compose
   puts on its containers, so a project that was taken `down` completely can't be found until you
   bring it up once by hand. Hermes can never start a project that was never deployed.
