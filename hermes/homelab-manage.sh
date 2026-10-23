@@ -10,6 +10,12 @@ readonly HA_URL=http://127.0.0.1:8123
 readonly HA_CONTAINER=homeassistant
 readonly DEFAULT_LOGBOOK_HOURS=24
 readonly MAX_LOGBOOK_HOURS=168
+readonly LOKI_URL=http://127.0.0.1:3100
+readonly PROMETHEUS_URL=http://127.0.0.1:9090
+readonly DEFAULT_SEARCH_HOURS=24
+readonly MAX_SEARCH_HOURS=720  # Loki keeps 30 days
+readonly MAX_QUERY_CHARS=500
+readonly ERROR_PATTERN='(?i)(error|exception|fatal|panic|traceback)'
 # Full "Authorization: Bearer …" line, root-only, passed to curl as a file so the token never
 # shows up in a process list.
 readonly HA_AUTH_HEADER_FILE=/etc/homelab-manage/ha_auth_header
@@ -46,6 +52,10 @@ usage: sudo -n homelab-manage.sh <action> [args]
   ha-log [lines]               Home Assistant container log (default 100, max 500)
   ha-logbook [hours] [entity_id]   what changed when and what caused it (default 24h, max 168h; last 500)
   ha-light <on|off|toggle> <light.entity>   switch a light — the only Home Assistant write allowed
+  loki-search <project> <text> [hours]   log lines containing text, any container of a project (default 24h, max 720h; newest 500)
+  loki-errors [project] [hours]          error/exception/fatal/panic lines, one project or all (same limits)
+  metrics <promql>             one Prometheus instant query (max 500 chars)
+  alerts                       Prometheus alerts currently pending or firing
 EOF
   exit 2
 }
@@ -173,6 +183,65 @@ ha_logbook() {
     | @tsv' | tail -n "$MAX_LINES"
 }
 
+hours_arg() {
+  local hours="${1:-$DEFAULT_SEARCH_HOURS}"
+  [[ "$hours" =~ ^[0-9]{1,4}$ && "$hours" -ge 1 ]] || die "hours must be a number"
+  if (( hours > MAX_SEARCH_HOURS )); then
+    hours=$MAX_SEARCH_HOURS
+  fi
+  echo "$hours"
+}
+
+require_project_name() {
+  [[ "$1" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] || die "invalid project name '$1'"
+}
+
+# The wrapper builds the LogQL itself (label selector + line filter) so a query can't be made
+# arbitrarily heavy; jq's tojson quotes the search text as a LogQL string.
+loki_query() {
+  local logql="$1" hours="$2" start
+  start="$(jq -rn --argjson hours "$hours" 'now - $hours * 3600 | strftime("%Y-%m-%dT%H:%M:%SZ")')"
+  curl -fsS --max-time 30 -G "$LOKI_URL/loki/api/v1/query_range" \
+    --data-urlencode "query=$logql" --data-urlencode "start=$start" \
+    --data-urlencode "limit=$MAX_LINES" --data-urlencode "direction=backward" |
+    jq -r '[.data.result[] | .stream.container as $container | .values[] | [.[0], $container, .[1]]]
+      | sort_by(.[0])[]
+      | "\(.[0] | tonumber / 1e9 | floor | strftime("%Y-%m-%dT%H:%M:%SZ"))  \(.[1])  \(.[2])"'
+}
+
+loki_search() {
+  local project="$1" text="$2" hours="$3" logql
+  logql="$(jq -rn --arg project "$project" --arg text "$text" \
+    '"{compose_project=" + ($project | tojson) + "} |= " + ($text | tojson)')"
+  loki_query "$logql" "$hours"
+}
+
+loki_errors() {
+  local project="$1" hours="$2" selector logql
+  if [[ -n "$project" ]]; then
+    selector="$(jq -rn --arg project "$project" '"{compose_project=" + ($project | tojson) + "}"')"
+  else
+    selector='{job="docker"}'
+  fi
+  logql="$selector |~ $(jq -rn --arg pattern "$ERROR_PATTERN" '$pattern | tojson')"
+  loki_query "$logql" "$hours"
+}
+
+# Prometheus' query endpoint is read-only, so free-form PromQL is fine; length and timeout are capped.
+prometheus_query() {
+  curl -fsS --max-time 20 -G "$PROMETHEUS_URL/api/v1/query" \
+    --data-urlencode "query=$1" --data-urlencode "timeout=15s" |
+    jq -r '.data.resultType as $type | .data.result
+      | if $type == "vector" then .[] | "\(.metric | to_entries | map("\(.key)=\(.value)") | join(","))  \(.value[1])"
+        elif $type == "matrix" then .[] | "\(.metric | to_entries | map("\(.key)=\(.value)") | join(","))  \(.values | length) samples, last \(.values[-1][1])"
+        else tojson end' | head -n 200
+}
+
+prometheus_alerts() {
+  curl -fsS --max-time 15 "$PROMETHEUS_URL/api/v1/alerts" |
+    jq -r '.data.alerts[] | [.state, .labels.alertname, (.labels.severity // "-"), .activeAt, (.annotations.summary // "")] | @tsv'
+}
+
 ha_automations() {
   ha_get states | jq -r '
     .[]
@@ -290,6 +359,31 @@ case "$action" in
     fi
     [[ -z "${2:-}" || "$2" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
     ha_logbook "$hours" "${2:-}"
+    ;;
+  loki-search)
+    [[ $# -eq 2 || $# -eq 3 ]] || usage
+    require_project_name "$1"
+    (( ${#2} >= 1 && ${#2} <= 200 )) || die "search text must be 1-200 characters"
+    hours="$(hours_arg "${3:-}")"
+    loki_search "$1" "$2" "$hours"
+    ;;
+  loki-errors)
+    [[ $# -le 2 ]] || usage
+    project="${1:-}"
+    if [[ -n "$project" ]]; then
+      require_project_name "$project"
+    fi
+    hours="$(hours_arg "${2:-}")"
+    loki_errors "$project" "$hours"
+    ;;
+  metrics)
+    [[ $# -eq 1 ]] || usage
+    (( ${#1} >= 1 && ${#1} <= MAX_QUERY_CHARS )) || die "query must be 1-$MAX_QUERY_CHARS characters"
+    prometheus_query "$1"
+    ;;
+  alerts)
+    [[ $# -eq 0 ]] || usage
+    prometheus_alerts
     ;;
   ha-light)
     [[ $# -eq 2 ]] || usage

@@ -19,6 +19,7 @@ dangerous-command checks on container backends.
 | `restart` / `update` (git pull + pull + up --build) of any Compose project, `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
 | Home Assistant: entity states (`ha-states`, `ha-state`), logbook (`ha-logbook`), automations (`ha-automations`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs and GPS coordinates are filtered out |
+| Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
 | Postgres connections, locks and stats; listing tables | `hermes_ro` role: `pg_monitor`, read-only transactions, 15 s timeout, 3 connections |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
@@ -36,6 +37,12 @@ so the agent can't change them, add a second layer: `approvals.mode: manual`
 (you approve dangerous commands from Telegram), `deny` globs for Docker/firewall/secrets, no
 auto-approval in cron or one-shot sessions, and `HERMES_WRITE_SAFE_ROOT` limiting file writes to
 its own directories. Treat these as a seatbelt, not the wall.
+
+The `browser`, `connections` and `cronjob` toolsets are left available on purpose. Keep in mind
+that a browser session logged into a web UI (Home Assistant, Grafana, Nginx Proxy Manager) with
+your credentials sidesteps every wrapper limit, and that scheduled jobs run wrapper actions with
+nobody watching. To switch any of them off, list it under `agent.disabled_toolsets` in
+`config.yaml`.
 
 ### What to know before relying on it
 
@@ -167,6 +174,22 @@ The non-admin user limits what the token could do if it ever leaked (no configur
 but it could still switch any device — which is why it stays root-only. Lights that Home Assistant
 exposes as `switch.*` (smart plugs) aren't covered; add their domain to `ha-light` only if you
 want them switchable.
+
+## Monitoring and alerts
+
+Hermes reads the monitoring stack through the wrapper (Grafana itself isn't needed — it only
+displays these): Loki for logs of every container over the last 30 days, including containers that
+were since recreated, and Prometheus for metrics and currently firing alerts. Try "¿qué errores ha
+habido hoy?", "has tradelog had timeouts this week?" or "memory trend of the backend".
+
+It doesn't create alerts. Ask it for one and it tests a PromQL expression against real data and
+replies with a rule in the format of `monitoring/prometheus/rules/home-automation.yml`. Add it to
+a file there, commit, pull on the host, then reload Prometheus
+(`docker compose restart prometheus` in `monitoring/`); Grafana delivers it to Telegram as
+described in [monitoring/README.md](../monitoring/README.md#alerts--telegram).
+
+Every scheduled check by the agent itself would spend model requests (and OpenRouter's free tier
+has 50 a day), so leave continuous checking to Prometheus.
 
 ## Choosing a model
 
