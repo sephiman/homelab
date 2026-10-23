@@ -31,6 +31,12 @@ tar czf "${DEST}/rustdesk.tar.gz" -C /sources/rustdesk .
 log "Archiving jellyfin config..."
 tar czf "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
 
+# Media apps: config + DB (+ the *arrs' own Backups/ zips); MediaCover is re-downloadable artwork.
+for app in prowlarr sonarr radarr bazarr seerr cleanuparr maintainerr searcharr; do
+  log "Archiving ${app} config..."
+  tar czf "${DEST}/${app}.tar.gz" --exclude=./MediaCover --exclude=./logs -C "/sources/${app}" .
+done
+
 # Vaultwarden: attachments, sends and rsa_key.pem (the vault itself is in PostgreSQL).
 # icon_cache is just downloaded favicons.
 log "Archiving vaultwarden data..."

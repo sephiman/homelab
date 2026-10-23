@@ -1,0 +1,21 @@
+groups:
+  - name: media
+    rules:
+      - alert: ArrHealthIssue
+        # Same list as each app's System → Status page (failing indexer, download client unreachable, ...).
+        expr: sum by (instance) ({__name__=~"(sonarr|radarr|prowlarr)_system_health_issues"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} reports {{ $value }} health issue(s)"
+          description: "Open the app's System → Status page for details."
+
+      - alert: ArrExporterDown
+        expr: up{instance=~"exportarr-.*"} == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} is down or can't reach its app"
+          description: "Check the container logs and that the API key in media/.env is set."

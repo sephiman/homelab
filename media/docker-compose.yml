@@ -12,9 +12,37 @@ services:
     networks:
       - my-network
 
+  # VPN tunnel for qBittorrent. Kill switch built in: if the tunnel drops, qBittorrent has no route out.
+  gluetun:
+    image: qmcgaw/gluetun:v3
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=surfshark
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${SURFSHARK_WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${SURFSHARK_WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES:-Netherlands}
+      - TZ=Europe/Amsterdam
+    ports:
+      # qBittorrent shares gluetun's network, so its UI is published here.
+      - "8881:8881"
+    restart: unless-stopped
+    networks:
+      - my-network
+
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
+    # Other containers reach it as `gluetun:8881`.
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     environment:
       - PUID=1000
       - PGID=1000
@@ -22,11 +50,202 @@ services:
       - WEBUI_PORT=8881
     volumes:
       - ${HOME}/qbittorrent/config:/config
-      - /mnt/media/downloads:/downloads
+      # Same /data root as Sonarr/Radarr so imports are hardlinks, not copies.
+      - /mnt/media:/data
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+      # Fixed API key from .env, so Recyclarr/Exportarr/Seerr work from the first start.
+      - PROWLARR__AUTH__APIKEY=${PROWLARR_API_KEY}
+    volumes:
+      - ${HOME}/prowlarr/config:/config
     ports:
-      - "8881:8881"
-      - "6881:6881"
-      - "6881:6881/udp"
+      - "9696:9696"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+      # Fixed API key from .env, so Recyclarr/Exportarr/Seerr work from the first start.
+      - SONARR__AUTH__APIKEY=${SONARR_API_KEY}
+    volumes:
+      - ${HOME}/sonarr/config:/config
+      - /mnt/media:/data
+    ports:
+      - "8989:8989"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  radarr:
+    image: lscr.io/linuxserver/radarr
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+      # Fixed API key from .env, so Recyclarr/Exportarr/Seerr work from the first start.
+      - RADARR__AUTH__APIKEY=${RADARR_API_KEY}
+    volumes:
+      - ${HOME}/radarr/config:/config
+      - /mnt/media:/data
+    ports:
+      - "7878:7878"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr
+    container_name: bazarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${HOME}/bazarr/config:/config
+      - /mnt/media:/data
+    ports:
+      - "6767:6767"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  # Syncs TRaSH-Guides quality profiles and custom formats into Sonarr/Radarr daily; no UI.
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:8
+    container_name: recyclarr
+    user: 1000:1000
+    environment:
+      - TZ=Europe/Amsterdam
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - RADARR_API_KEY=${RADARR_API_KEY}
+    volumes:
+      - ${HOME}/recyclarr/config:/config
+      - ./recyclarr/recyclarr.yml:/config/recyclarr.yml:ro
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr
+    container_name: seerr
+    init: true
+    environment:
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${HOME}/seerr/config:/app/config
+    ports:
+      - "5055:5055"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/settings/public || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  # Telegram bot for adding series/movies; configured in ${HOME}/searcharr/data/settings.py.
+  searcharr:
+    image: toddrob/searcharr
+    container_name: searcharr
+    environment:
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${HOME}/searcharr/data:/app/data
+      - ${HOME}/searcharr/logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  # Removes stalled, slow and malicious downloads from the queues.
+  cleanuparr:
+    image: ghcr.io/cleanuparr/cleanuparr
+    container_name: cleanuparr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${HOME}/cleanuparr/config:/config
+      # Needed to tell whether a finished download still has a hardlink in the library.
+      - /mnt/media:/data
+    ports:
+      - "11011:11011"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  # Rule-based deletion of watched/stale media to keep /mnt/media from filling up.
+  maintainerr:
+    image: ghcr.io/maintainerr/maintainerr
+    container_name: maintainerr
+    user: 1000:1000
+    environment:
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${HOME}/maintainerr/data:/opt/data
+    ports:
+      - "6246:6246"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  exportarr-sonarr:
+    image: ghcr.io/onedr0p/exportarr
+    container_name: exportarr-sonarr
+    command: ["sonarr"]
+    environment:
+      - PORT=9707
+      - URL=http://sonarr:8989
+      - API_KEY=${SONARR_API_KEY}
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "9707"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  exportarr-radarr:
+    image: ghcr.io/onedr0p/exportarr
+    container_name: exportarr-radarr
+    command: ["radarr"]
+    environment:
+      - PORT=9707
+      - URL=http://radarr:7878
+      - API_KEY=${RADARR_API_KEY}
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "9707"
+    restart: unless-stopped
+    networks:
+      - my-network
+
+  exportarr-prowlarr:
+    image: ghcr.io/onedr0p/exportarr
+    container_name: exportarr-prowlarr
+    command: ["prowlarr"]
+    environment:
+      - PORT=9707
+      - URL=http://prowlarr:9696
+      - API_KEY=${PROWLARR_API_KEY}
+    labels:
+      prometheus.scrape: "true"
+      prometheus.port: "9707"
     restart: unless-stopped
     networks:
       - my-network

@@ -26,6 +26,14 @@ services:
       - ${HOME}/qbittorrent:/sources/qbittorrent:ro
       - ${HOME}/rustdesk:/sources/rustdesk:ro
       - ${HOME}/jellyfin/config:/sources/jellyfin-config:ro
+      - ${HOME}/prowlarr/config:/sources/prowlarr:ro
+      - ${HOME}/sonarr/config:/sources/sonarr:ro
+      - ${HOME}/radarr/config:/sources/radarr:ro
+      - ${HOME}/bazarr/config:/sources/bazarr:ro
+      - ${HOME}/seerr/config:/sources/seerr:ro
+      - ${HOME}/cleanuparr/config:/sources/cleanuparr:ro
+      - ${HOME}/maintainerr/data:/sources/maintainerr:ro
+      - ${HOME}/searcharr/data:/sources/searcharr:ro
       - ${HOME}/vaultwarden/data:/sources/vaultwarden:ro
     networks:
       - my-network

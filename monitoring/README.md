@@ -49,6 +49,7 @@ Discovery uses a read-only [Docker socket proxy](https://github.com/Tecnativa/do
 - **All container logs**: shipped by Alloy via Docker service discovery — labels include `container`, `compose_project`, `compose_service`, `stream`.
 - **Home Assistant**: native Prometheus integration (entity states, automations, recorder, system stats).
 - **Mosquitto / MQTT**: messages in/out, connected clients, retained messages.
+- **Media stack** (`media/`): Sonarr, Radarr and Prowlarr via Exportarr — queues, library size, indexer stats, health issues. Alerts in `prometheus/rules/media.yml`.
 - **`satoshi-scanner`** (optional): a personal Python Bitcoin-address scanner in a separate repo ([sephiman/satoshi-scanner](https://github.com/sephiman/satoshi-scanner)). Auto-discovered via the `prometheus.scrape` labels; nothing here depends on it.
 - **`crypto-ambush`** (optional): the three ambush trading bots — `cambush_*` metrics auto-discovered like the above, plus read-only Postgres datasources for trading performance (see [crypto-ambush dashboard setup](#crypto-ambush-dashboard-setup)).
 
@@ -72,9 +73,12 @@ Restart Home Assistant. Then create a long-lived access token in the HA UI (Prof
 ```bash
 cp monitoring/prometheus/ha_token.example monitoring/prometheus/ha_token
 # edit the file and paste the token (no quotes, no trailing newline beyond one)
+# Prometheus runs as nobody (65534) — a 600 file makes every HA scrape fail and fires HomeAssistantDown
+sudo chown "$USER":65534 monitoring/prometheus/ha_token
+chmod 640 monitoring/prometheus/ha_token
 ```
 
-`monitoring/prometheus/ha_token` is gitignored.
+`monitoring/prometheus/ha_token` is gitignored. Re-run the `chown`/`chmod` whenever the file is recreated.
 
 ## Bring it up
 

@@ -10,6 +10,7 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 | `qbittorrent`         | full folder                       |
 | `rustdesk`            | full folder                       |
 | `jellyfin/config`     | **config only** (no media/cache)  |
+| `prowlarr`, `sonarr`, `radarr`, `bazarr`, `seerr`, `cleanuparr` config; `maintainerr`, `searcharr` data | config + DB (+ the *arrs' built-in `Backups/`); no `MediaCover`, `logs` |
 | `vaultwarden/data`    | attachments, sends, `rsa_key.pem` (no `icon_cache`); the vault itself is in PostgreSQL |
 | PostgreSQL            | `pg_dumpall` — all databases + roles |
 
