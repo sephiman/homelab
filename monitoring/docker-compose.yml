@@ -1,6 +1,6 @@
 services:
   dockhand:
-    image: fnsys/dockhand:v1.0.53
+    image: fnsys/dockhand:v1.0.54
     container_name: dockhand
     ports:
       # Grafana already owns host port 3000.
@@ -21,7 +21,7 @@ services:
       - my-network
 
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.15.1
     container_name: prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -77,7 +77,7 @@ services:
       - my-network
 
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     container_name: loki
     command: ["-config.file=/etc/loki/loki-config.yml"]
     volumes:
@@ -90,7 +90,7 @@ services:
       - my-network
 
   alloy:
-    image: grafana/alloy:v1.20.1
+    image: grafana/alloy:v1.21.2
     container_name: alloy
     command:
       - "run"
