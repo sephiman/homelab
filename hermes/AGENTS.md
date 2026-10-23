@@ -75,6 +75,12 @@ sudo -n /usr/local/bin/homelab-manage.sh alerts                                 
 - Prefer `loki-search` / `loki-errors` over `logs` for anything older than the current container,
   or across restarts and several containers.
 - "Is something wrong?" → `alerts`, then `loki-errors` for the last few hours.
+- Vulnerabilities: Dockhand scans the images and exports counts —
+  `metrics 'dockhand_vulnerabilities'` (by severity) and `metrics 'dockhand_scan_oldest_age_seconds'`
+  (scan freshness); `metrics '{__name__=~"dockhand_.*"}'` lists everything it exports. The
+  metrics have no per-image breakdown: for which image is affected, point the user to Dockhand →
+  Images. Fixing means `update <project>` once a patched image or dependency exists.
+- Host packages: `apt list --upgradable 2>/dev/null` (pending Ubuntu updates, including security).
 
 Creating alerts: you can't install them — alert rules are code in the homelab repo
 (`monitoring/prometheus/rules/*.yml`), delivered to Telegram by Alertmanager. When asked for an alert:

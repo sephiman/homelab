@@ -5,6 +5,14 @@ services:
     ports:
       # Grafana already owns host port 3000.
       - "9000:3000"
+    environment:
+      # Vulnerability-scan counts for Prometheus. Only /metrics skips the login: Community
+      # edition API tokens carry full access (= root over Docker), too much to hand Prometheus.
+      - EXPORT_METRICS=true
+      - EXPORT_METRICS_PUBLIC=true
+    labels:
+      - prometheus.scrape=true
+      - prometheus.port=3000
     volumes:
       - dockhand_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock

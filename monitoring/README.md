@@ -147,6 +147,8 @@ Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertna
 
 Baseline rules in `prometheus/rules/home-automation.yml`:
 `HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
+`prometheus/rules/security.yml` adds `CriticalImageVulnerabilities` and `ImageScansStale`, from
+Dockhand's image scans.
 To add one, drop it in a file there and `docker compose restart prometheus`.
 
 ## Persistence
@@ -163,6 +165,7 @@ Docker-managed named volumes (survive `docker compose down`):
 ## Security notes
 
 - `alloy`, `cadvisor` and `dockhand` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
+- Dockhand's `/metrics` is public (`EXPORT_METRICS_PUBLIC=true`) so Prometheus can scrape vulnerability counts without an API token — Community edition tokens carry full access. Anyone who can reach port 9000 sees those counts; the rest of Dockhand stays behind its login.
 - Only Grafana should be exposed externally (through NPM, with HTTPS). Prometheus, Alertmanager, Loki and Alloy are already loopback-only; exporters publish no host port at all.
 - Pin image tags — Loki/Prom schemas can break on `:latest`. Done for everything, Dockhand included.
 
