@@ -115,6 +115,13 @@ sudo mkdir -p /mnt/media/{movies,series,music,downloads/movies,downloads/series}
 sudo chown -R 1000:1000 /mnt/media
 ```
 
+If a container crash-loops with `EACCES: permission denied` (Seerr, Maintainerr and Recyclarr run as UID 1000 and are the first to hit it), its folder was created by Docker as root because it didn't exist yet. Hand it back and restart:
+
+```bash
+sudo chown -R 1000:1000 ~/{prowlarr,sonarr,radarr,bazarr,recyclarr,seerr,cleanuparr} ~/maintainerr ~/searcharr
+docker compose up -d
+```
+
 ## Environment variables
 
 Copy `.env.example` to `.env`:
