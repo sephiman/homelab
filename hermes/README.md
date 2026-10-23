@@ -20,7 +20,8 @@ dangerous-command checks on container backends.
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
 | Home Assistant: entity states (`ha-states`, `ha-state`), logbook (`ha-logbook`), automations (`ha-automations`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs and GPS coordinates are filtered out |
 | Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
-| Postgres connections, locks and stats; listing tables | `hermes_ro` role: `pg_monitor`, read-only transactions, 15 s timeout, 3 connections |
+| Postgres: reading every database except Vaultwarden, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; Vaultwarden's DB denies it `CONNECT` |
+| Project source code (`code-ls`, `code-show`, `code-grep`) and `git-pull` | Read from git `HEAD` as the folder's owner — gitignored files (`.env`…) are unreachable and secret-looking files (`.env*`, `*.key`, `*secret*`…) are refused even if committed |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
 | Denied | How |
@@ -29,7 +30,7 @@ dangerous-command checks on container backends.
 | Root shell, `/etc`, firewall, formatting disks | sudoers allows only the wrapper; the wrapper rejects any other argument |
 | `.env` files (of every project), `ha_token`, Vaultwarden data, rclone config | The installer sets `chmod 600` on `.env` files in each project folder and checks that the project owners' homes are closed to other users |
 | Container env vars via `docker inspect` (`POSTGRES_PASSWORD`, `ADMIN_TOKEN`, …) | The wrapper's `inspect` prints a fixed template that never includes env |
-| `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`, reading table data | `hermes_ro` has no table grants; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` |
+| `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`; reading Vaultwarden | `hermes_ro` has read-only grants only; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` (do the same for any database Hermes must not read) |
 | LAN, other host services, Docker networks | nftables egress rule for the `hermes` uid: DNS, `127.0.0.1:5432` and outbound 443 only |
 
 Hermes' own settings in [`config.yaml`](./config.yaml), installed root-owned as its managed config
@@ -279,14 +280,14 @@ waits for your yes.
 - Everyone in the group can read its replies (log excerpts, container names, DB stats).
 - After editing `hermes/.env`: `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
 
-To let it read the data of one specific database (beyond listing tables), grant it explicitly,
-the same way `grafana_ro.sql` does:
+Hermes reads every database it can connect to (`pg_read_all_data`). To keep one out, revoke
+`CONNECT` from `PUBLIC` on it, as `postgres/vaultwarden.sql` does:
 
 ```sql
-\connect <database>
-GRANT USAGE ON SCHEMA public TO hermes_ro;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO hermes_ro;
+REVOKE ALL ON DATABASE <database> FROM PUBLIC;
 ```
+
+Whatever it reads goes to the model provider — keep that in mind for financial data on free tiers.
 
 ## Maintenance
 

@@ -22,6 +22,9 @@ readonly HA_AUTH_HEADER_FILE=/etc/homelab-manage/ha_auth_header
 # Attributes that can carry secrets or the home's location never leave the wrapper.
 readonly HA_HIDDEN_ATTRIBUTES='token|password|secret|key|picture|latitude|longitude|gps'
 readonly MAX_LINES=500
+readonly MAX_CODE_BYTES=200000
+# Committed by mistake or not, files named like secrets are never shown.
+readonly SECRET_PATH_PATTERN='(^|/)(\.env[^/]*|[^/]*\.(pem|key|p12|pfx|jks|keystore)|id_[a-z0-9]+|[^/]*(secret|credential|password)[^/]*)$'
 # Fixed template so `inspect` never prints Config.Env (passwords, tokens, DATABASE_URL).
 readonly INSPECT_FORMAT='{{.Name}}
   project:  {{index .Config.Labels "com.docker.compose.project"}}
@@ -44,6 +47,10 @@ usage: sudo -n homelab-manage.sh <action> [args]
   journal [lines]              docker.service journal (default 100, max 500)
   restart <project>            docker compose restart
   git-status <project>         branch, commits behind/ahead of the remote, last commits, local changes
+  git-pull <project>           git pull --ff-only only (no rebuild; use update to redeploy)
+  code-ls <project> [path]     files committed in the project's folder (git HEAD)
+  code-show <project> <path>   one committed file (max 200 KB; secret-looking files refused)
+  code-grep <project> <text>   committed lines containing text (fixed string, max 300 lines)
   update  <project>            git pull --ff-only (if a git checkout), compose pull, up -d --build
   restart-docker               systemctl restart docker (restarts everything)
   ha-states [domain]           Home Assistant entities with state (optionally one domain: light, sensor…)
@@ -145,6 +152,29 @@ git_status() {
   owner_git log --oneline --decorate -5
   echo "--- incoming (not pulled yet)"
   owner_git log --oneline 'HEAD..@{upstream}' 2>/dev/null || echo "no upstream branch configured"
+}
+
+# Code is read from git's HEAD, never the working tree: gitignored files (.env…) are unreachable.
+require_code_path() {
+  [[ "$1" =~ ^[A-Za-z0-9._/@+-]{1,300}$ && "$1" != /* && "$1" != *..* ]] || die "invalid path '$1'"
+  [[ ! "$1" =~ $SECRET_PATH_PATTERN ]] || die "refusing to show a secret-looking file: $1"
+}
+
+code_ls() {
+  is_git_checkout || die "not a git checkout: $PROJECT_DIR"
+  owner_git ls-tree -r --name-only HEAD -- "${1:-.}" | grep -Ev "$SECRET_PATH_PATTERN" | head -n 1000
+}
+
+code_show() {
+  is_git_checkout || die "not a git checkout: $PROJECT_DIR"
+  owner_git show "HEAD:./$1" | head -c "$MAX_CODE_BYTES"
+}
+
+code_grep() {
+  is_git_checkout || die "not a git checkout: $PROJECT_DIR"
+  # Lines are HEAD:<path>:<line>:<text>; the secret filter applies to <path>.
+  owner_git grep -n -I -F -e "$1" HEAD -- . |
+    secret="$SECRET_PATH_PATTERN" awk -F: '$2 !~ ENVIRON["secret"]' | head -n 300 || true
 }
 
 require_ha_token() {
@@ -312,6 +342,33 @@ case "$action" in
     resolve_project "$1"
     hold_lock
     compose "$1" restart
+    ;;
+  git-pull)
+    [[ $# -eq 1 ]] || usage
+    resolve_project "$1"
+    is_git_checkout || die "not a git checkout: $PROJECT_DIR"
+    hold_lock
+    git_pull
+    ;;
+  code-ls)
+    [[ $# -eq 1 || $# -eq 2 ]] || usage
+    resolve_project "$1"
+    if [[ -n "${2:-}" ]]; then
+      require_code_path "$2"
+    fi
+    code_ls "${2:-}"
+    ;;
+  code-show)
+    [[ $# -eq 2 ]] || usage
+    resolve_project "$1"
+    require_code_path "$2"
+    code_show "$2"
+    ;;
+  code-grep)
+    [[ $# -eq 2 ]] || usage
+    resolve_project "$1"
+    (( ${#2} >= 2 && ${#2} <= 200 )) || die "search text must be 2-200 characters"
+    code_grep "$2"
     ;;
   git-status)
     [[ $# -eq 1 ]] || usage
