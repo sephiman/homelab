@@ -20,6 +20,7 @@ Seerr / Searcharr (requests) ─▶ Sonarr / Radarr ─▶ Prowlarr (indexers)
 | [gluetun](https://github.com/qdm12/gluetun) | VPN client (Surfshark WireGuard) with a built-in kill switch. qBittorrent's only way out. |
 | [qBittorrent](https://www.qbittorrent.org/) ([linuxserver.io](https://docs.linuxserver.io/images/docker-qbittorrent/)) | Torrent client, inside gluetun's network. |
 | [Prowlarr](https://prowlarr.com/) | Indexer manager: configure trackers once, synced to Sonarr/Radarr. |
+| [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Headless browser that solves Cloudflare challenges for Prowlarr (e.g. 1337x). |
 | [Sonarr](https://sonarr.tv/) / [Radarr](https://radarr.video/) | Series / movie automation: search, download, rename, import. |
 | [Bazarr](https://www.bazarr.media/) | Downloads subtitles for everything Sonarr/Radarr import. |
 | [Recyclarr](https://recyclarr.dev/) | Syncs [TRaSH-Guides](https://trash-guides.info/) quality profiles into Sonarr/Radarr daily. No UI. |
@@ -36,6 +37,7 @@ Seerr / Searcharr (requests) ─▶ Sonarr / Radarr ─▶ Prowlarr (indexers)
 | jellyfin | `jellyfin` | `8096` | `http://jellyfin:8096` |
 | qbittorrent (via gluetun) | `qbittorrent` / `gluetun` | `8881` | `http://gluetun:8881` |
 | prowlarr | `prowlarr` | `9696` | `http://prowlarr:9696` |
+| flaresolverr | `flaresolverr` | — (not published: unauthenticated proxy) | `http://flaresolverr:8191` |
 | sonarr | `sonarr` | `8989` | `http://sonarr:8989` |
 | radarr | `radarr` | `7878` | `http://radarr:7878` |
 | bazarr | `bazarr` | `6767` | `http://bazarr:6767` |
@@ -161,7 +163,12 @@ At http://localhost:8096: libraries on `/media/movies`, `/media/series`, … (**
 
 ### 3. Prowlarr
 
-At http://localhost:9696: *Indexers → Add Indexer* for each tracker. If an indexer is behind Cloudflare it will report a challenge error; that needs [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), not part of this stack yet.
+At http://localhost:9696:
+
+1. *Settings → Indexers → Indexer Proxies → + → FlareSolverr*: name `FlareSolverr`, tag **`flaresolverr`**, host `http://flaresolverr:8191/`. Prowlarr only routes indexers carrying that tag through it.
+2. *Indexers → Add Indexer* for each tracker. For Cloudflare-protected ones (1337x, …), add the **`flaresolverr`** tag in the indexer's form before *Test* — without it the test fails with *blocked by CloudFlare Protection*.
+
+If FlareSolverr can't get through a site (`docker logs flaresolverr` shows the challenge timing out), [Byparr](https://github.com/ThePhaseless/Byparr) is a drop-in replacement: swap the image for `ghcr.io/thephaseless/byparr`, same port and API, no Prowlarr changes.
 
 ### 4. Sonarr and Radarr
 

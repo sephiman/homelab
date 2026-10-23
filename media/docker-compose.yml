@@ -71,6 +71,18 @@ services:
     networks:
       - my-network
 
+  # Solves Cloudflare challenges for Prowlarr indexers tagged `flaresolverr`.
+  # No published port: it's an unauthenticated browser proxy, reachable only as flaresolverr:8191.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Europe/Amsterdam
+    restart: unless-stopped
+    networks:
+      - my-network
+
   sonarr:
     image: lscr.io/linuxserver/sonarr
     container_name: sonarr
