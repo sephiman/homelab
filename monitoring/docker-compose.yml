@@ -31,6 +31,24 @@ services:
     networks:
       - my-network
 
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    container_name: alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    secrets:
+      - telegram_bot_token
+      - telegram_alert_chat_id
+    ports:
+      - "127.0.0.1:9093:9093"
+    restart: unless-stopped
+    networks:
+      - my-network
+
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: docker-socket-proxy
@@ -93,8 +111,6 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_ALERT_CHAT_ID=${TELEGRAM_ALERT_CHAT_ID:-}
       # Read-only crypto-ambush DB role for the trading dashboard datasources
       # (see postgres/grafana_ro.sql). Empty -> those datasources fail auth,
       # everything else keeps working.
@@ -173,9 +189,16 @@ services:
 volumes:
   dockhand_data:
   prometheus_data:
+  alertmanager_data:
   loki_data:
   alloy_data:
   grafana_data:
+
+secrets:
+  telegram_bot_token:
+    environment: TELEGRAM_BOT_TOKEN
+  telegram_alert_chat_id:
+    environment: TELEGRAM_ALERT_CHAT_ID
 
 networks:
   my-network:

@@ -185,7 +185,7 @@ habido hoy?", "has tradelog had timeouts this week?" or "memory trend of the bac
 It doesn't create alerts. Ask it for one and it tests a PromQL expression against real data and
 replies with a rule in the format of `monitoring/prometheus/rules/home-automation.yml`. Add it to
 a file there, commit, pull on the host, then reload Prometheus
-(`docker compose restart prometheus` in `monitoring/`); Grafana delivers it to Telegram as
+(`docker compose restart prometheus` in `monitoring/`); Alertmanager delivers it to Telegram as
 described in [monitoring/README.md](../monitoring/README.md#alerts--telegram).
 
 Every scheduled check by the agent itself would spend model requests (and OpenRouter's free tier

@@ -1,0 +1,14 @@
+route:
+  receiver: telegram
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      # Compose secrets filled from TELEGRAM_* in .env (Alertmanager can't expand env vars).
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id_file: /run/secrets/telegram_alert_chat_id
+        send_resolved: true

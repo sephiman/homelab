@@ -7,8 +7,9 @@ Homelab management + observability stack (Phase 1: full coverage for the `home-a
 | Service              | Container               | Host port      | Purpose                                                                |
 |----------------------|-------------------------|----------------|------------------------------------------------------------------------|
 | dockhand             | `dockhand`              | `9000`         | Docker UI (containers, stacks, logs, shell)                            |
-| grafana              | `grafana`               | `3000`         | Dashboards + unified alerting (Telegram)                               |
-| prometheus           | `prometheus`            | `9090` (loopback) | Metrics store, 15d retention                                        |
+| grafana              | `grafana`               | `3000`         | Dashboards                                                             |
+| prometheus           | `prometheus`            | `9090` (loopback) | Metrics store + alert rules, 15d retention                          |
+| alertmanager         | `alertmanager`          | `9093` (loopback) | Routes firing Prometheus alerts to Telegram                         |
 | docker-socket-proxy  | `docker-socket-proxy`   | —              | Read-only Docker API for Prometheus service discovery                  |
 | loki                 | `loki`                  | `3100` (loopback) | Log store, 30d retention                                            |
 | alloy                | `alloy`                 | `12345` (loopback) | Grafana Alloy — ships every container's logs to Loki               |
@@ -16,7 +17,7 @@ Homelab management + observability stack (Phase 1: full coverage for the `home-a
 | cadvisor             | `cadvisor`              | —              | Per-container metrics                                                  |
 | mosquitto-exporter   | `mosquitto-exporter`    | —              | MQTT broker metrics (clients, messages/sec)                            |
 
-Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names. Prometheus, Loki and Alloy bind to `127.0.0.1` — their UIs work from the host (`http://localhost:9090`, …) but are not reachable from the LAN.
+Internal-only services (no host port) are scraped by Prometheus through the shared `all_dockers` network using their container names. Prometheus, Alertmanager, Loki and Alloy bind to `127.0.0.1` — their UIs work from the host (`http://localhost:9090`, …) but are not reachable from the LAN.
 
 ## Auto-discovery: how to add a new scrape target
 
@@ -134,15 +135,19 @@ Drop their JSON into `grafana/dashboards/` to make the ones you keep permanent.
 
 ## Alerts → Telegram
 
-1. Create a Telegram bot via `@BotFather`, save the token in `.env` as `TELEGRAM_BOT_TOKEN`.
-2. Get your chat ID from `@userinfobot`, save as `TELEGRAM_ALERT_CHAT_ID`.
-3. Restart the Grafana container (`docker compose restart grafana`).
-4. In Grafana → *Alerting → Contact points → New*, type Telegram. Reference the env vars as `$__env{TELEGRAM_BOT_TOKEN}` and `$__env{TELEGRAM_ALERT_CHAT_ID}`.
-5. Set this contact point as the default in *Notification policies*.
+Prometheus evaluates the rules in `prometheus/rules/*.yml` and pushes firing alerts to Alertmanager, which sends them (and their resolution) to Telegram. Grafana only displays them (*Alerting → Alert rules → Prometheus-managed*); its own contact points are not used.
 
-Baseline alert rules are pre-loaded from `prometheus/rules/home-automation.yml`:
+1. Create a Telegram bot via `@BotFather`, save the token in `.env` as `TELEGRAM_BOT_TOKEN`.
+2. Get your chat ID from `@userinfobot`, save as `TELEGRAM_ALERT_CHAT_ID`. Send the bot a message first — bots can't start a chat.
+3. `docker compose up -d alertmanager` (recreates it with the new values).
+
+Alertmanager can't read env vars in its config, so compose hands both values over as secrets (`/run/secrets/telegram_*`) read by `alertmanager/alertmanager.yml`. Left empty, Alertmanager still runs but every send fails with `Unauthorized` in `docker logs alertmanager`.
+
+Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertname`, re-sent every 4h while firing. Silence one for maintenance at http://localhost:9093.
+
+Baseline rules in `prometheus/rules/home-automation.yml`:
 `HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
-Grafana will pick them up automatically from the Prometheus datasource (Alerting → Alert rules → Prometheus-managed).
+To add one, drop it in a file there and `docker compose restart prometheus`.
 
 ## Persistence
 
@@ -150,6 +155,7 @@ Docker-managed named volumes (survive `docker compose down`):
 
 - `dockhand_data` — Dockhand SQLite DB (settings, users, stacks) and its encryption key.
 - `prometheus_data` — TSDB (~hundreds of MB/month).
+- `alertmanager_data` — silences and notification state.
 - `loki_data` — logs + indexes.
 - `alloy_data` — Alloy WAL / positions.
 - `grafana_data` — Grafana DB (users, alerts, dashboards-in-DB).
@@ -157,6 +163,6 @@ Docker-managed named volumes (survive `docker compose down`):
 ## Security notes
 
 - `alloy`, `cadvisor` and `dockhand` bind-mount `/var/run/docker.sock` — UI/agent access is effectively root on the Docker host.
-- Only Grafana should be exposed externally (through NPM, with HTTPS). Prometheus, Loki and Alloy are already loopback-only; exporters publish no host port at all.
+- Only Grafana should be exposed externally (through NPM, with HTTPS). Prometheus, Alertmanager, Loki and Alloy are already loopback-only; exporters publish no host port at all.
 - Pin image tags — Loki/Prom schemas can break on `:latest`. Done for everything, Dockhand included.
 

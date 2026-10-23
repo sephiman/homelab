@@ -73,7 +73,7 @@ sudo -n /usr/local/bin/homelab-manage.sh alerts                                 
 - "Is something wrong?" → `alerts`, then `loki-errors` for the last few hours.
 
 Creating alerts: you can't install them — alert rules are code in the homelab repo
-(`monitoring/prometheus/rules/*.yml`), delivered to Telegram by Grafana. When asked for an alert:
+(`monitoring/prometheus/rules/*.yml`), delivered to Telegram by Alertmanager. When asked for an alert:
 1. Find a PromQL expression that captures it and run it with `metrics` to show it matches real data.
 2. Reply with a ready-to-paste rule in the repo's format:
    ```yaml
