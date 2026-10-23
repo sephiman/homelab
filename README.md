@@ -1,6 +1,6 @@
 # Homelab
 
-_A [Sephilabs](https://github.com/sephiman) project._
+_A [Sephimandev](https://github.com/sephiman) project._
 
 Collection of self-hosted services orchestrated with Docker Compose. Each folder is an independent stack with its own `docker-compose.yml` and README.
 
@@ -19,6 +19,14 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 | [`hermes/`](./hermes) | Hermes Agent — Telegram ops assistant (any LLM provider; free options in its README). Host install under a locked-down `hermes` user, not a compose stack | Telegram bot |
 
 Each stack's README covers its ports, volumes, first-run steps and gotchas.
+
+## Tools
+
+Not compose stacks — run on the workstation, not the homelab host.
+
+| Tool | What it does |
+|------|--------------|
+| [`coding-agent/`](./coding-agent) | Vendor-agnostic coding agent: an architect → implementer → verifier pipeline that drives Claude Code, Gemini CLI and OpenCode headlessly, so each role uses the right subscription or price tier under one set of coding rules |
 
 ## Shared network (`all_dockers`)
 
@@ -97,6 +105,6 @@ cp .env.example .env
 
 ## License
 
-Copyright (C) 2026 Sephilabs (https://github.com/sephiman)
+Copyright (C) 2026 Sephimandev (https://github.com/sephiman)
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](./LICENSE) file for the full text.

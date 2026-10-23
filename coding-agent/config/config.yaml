@@ -1,0 +1,87 @@
+# Coding Agent Configuration
+# Vendor-agnostic 3-tier model architecture
+
+active_profile: balanced
+
+# Predefined model and runner combinations
+# Claude and Gemini take their CLI aliases (opus/sonnet/haiku, pro/flash/flash-lite), which follow
+# new releases; OpenCode takes opencode/<model> (free Zen models) or opencode-go/<model> (OpenCode Go plan);
+# list them with `opencode models opencode` / `opencode models opencode-go` after `opencode auth login`.
+profiles:
+  balanced:
+    description: "High-reasoning architect (Claude), efficient implementer (OpenCode), fast verifier (Gemini)"
+    architect:
+      runner: claude
+      model: "opus"
+    implementer:
+      runner: opencode
+      model: "opencode/deepseek-v4.1-flash-free"
+    verifier:
+      runner: gemini
+      model: "flash"
+
+  cost_saver:
+    description: "Gemini Pro for architecture, OpenCode for cheap implementation, Gemini Flash-Lite for verification"
+    architect:
+      runner: gemini
+      model: "pro"
+    implementer:
+      runner: opencode
+      model: "opencode/glm-5.3-flash-free"
+    verifier:
+      runner: gemini
+      model: "flash-lite"
+
+  max_quality:
+    description: "Claude Code throughout architecture and implementation, Gemini for independent verification"
+    architect:
+      runner: claude
+      model: "opus"
+    implementer:
+      runner: claude
+      model: "sonnet"
+    verifier:
+      runner: gemini
+      model: "flash"
+
+  opencode_only:
+    description: "Everything on the OpenCode Go plan: Gemini 4 Argon plans, DeepSeek implements, MiMo verifies"
+    # Needs `opencode auth login` with OpenCode Go. Argon allows ~220 requests / 5h on Go (880 on Go Plus);
+    # an interactive planning chat spends one per model turn and tool call.
+    architect:
+      runner: opencode
+      model: "opencode-go/gemini-4-argon-contributor"
+    implementer:
+      runner: opencode
+      model: "opencode-go/deepseek-v4.1-flash"
+    verifier:
+      runner: opencode
+      model: "opencode-go/mimo-v2.6-flash"
+
+# Runner executable settings and headless flags
+runners:
+  claude:
+    command: "claude"
+    # Runs non-interactively using browser-authenticated session
+    flags: ["-p"]
+  gemini:
+    command: "gemini"
+    # Extra flags only; the runner adds -p itself and sends the prompt on stdin
+    flags: []
+    plan_mode_flag: "--approval-mode=plan"
+    # auto_edit approves file edits only; shell commands stay unapproved (checks are run by the orchestrator)
+    exec_mode_flag: "--approval-mode=auto_edit"
+  opencode:
+    command: "opencode"
+    # OpenCode CLI runner options
+    flags: ["run"]
+
+# General agent settings
+settings:
+  rules_file: "config/coding-rules.md"
+  plan_first_approval: true
+  auto_test_verification: true
+  # Max repair attempts if verification checks fail
+  max_verifier_iterations: 2
+  # Per agent call and per check command; implementations and Testcontainers suites take minutes
+  runner_timeout_seconds: 3600
