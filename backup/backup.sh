@@ -68,7 +68,10 @@ log "Local backup ready: $(du -sh "${DEST}" | cut -f1)"
 
 # 3. Upload to Google Drive ------------------------------------------------
 log "Uploading to ${RCLONE_REMOTE}:${RCLONE_PATH}/${TIMESTAMP} ..."
-rclone copy "${DEST}" "${RCLONE_REMOTE}:${RCLONE_PATH}/${TIMESTAMP}" --stats-one-line --stats=30s
+# Drive answers bursts with 403 quota errors; throttle and retry instead of failing the run.
+rclone copy "${DEST}" "${RCLONE_REMOTE}:${RCLONE_PATH}/${TIMESTAMP}" \
+  --tpslimit 5 --retries 5 --retries-sleep 1m --low-level-retries 20 \
+  --stats-one-line --stats=30s
 
 # 4. Local retention: keep only the most recent ${LOCAL_KEEP} backup(s) ----
 log "Pruning local backups, keeping the most recent ${LOCAL_KEEP}..."

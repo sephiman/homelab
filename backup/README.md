@@ -57,6 +57,24 @@ There are two distinct concepts:
 - **Remote** (`RCLONE_REMOTE`, e.g. `gdrive`) — the authorized connection to your Google account. It is **not** a folder; it is created once with `rclone config` and stored as an OAuth token in `rclone.conf`.
 - **Path** (`RCLONE_PATH`, e.g. `homelab-backups`) — a folder inside the Drive. You do **not** create it by hand: `rclone` creates it (and a dated subfolder per backup) automatically on the first upload.
 
+### Create your own OAuth client first
+
+Left empty, `client_id` falls back to rclone's built-in client (Google project `202264815644`), whose
+per-minute quota is shared by every rclone user worldwide. Uploads then fail at random with
+`Error 403: Quota exceeded for quota metric 'Queries' ... consumer 'project_number:202264815644'`.
+Create a client of your own, following [rclone's guide](https://rclone.org/drive/#making-your-own-client-id):
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable the **Google Drive API**.
+2. Configure the OAuth consent screen (External, add yourself as a test user) and **publish** it — tokens of an app left in *Testing* expire after 7 days.
+3. Create an **OAuth client ID** of type *Desktop app* and copy the client ID and secret.
+
+An existing remote can be switched to it without recreating it:
+
+```bash
+docker compose run --rm backup rclone config update gdrive client_id <ID> client_secret <SECRET>
+docker compose run --rm backup rclone config reconnect gdrive:
+```
+
 ### Create the remote (interactive, once)
 
 Build the image and run the interactive config — it writes `rclone.conf` into the host-mounted config folder (`${HOME}/backup/config/rclone`):
@@ -73,7 +91,7 @@ Answer the prompts:
 | `n/s/q`                         | `n` (New remote)                                    |
 | `name>`                         | `gdrive` (must match `RCLONE_REMOTE` in `.env`)     |
 | `Storage>`                      | `drive` (Google Drive)                              |
-| `client_id> / client_secret>`   | leave empty (press Enter)                           |
+| `client_id> / client_secret>`   | your own OAuth client (see above) — **don't** leave empty |
 | `scope>`                        | `1` (full access) — or `3` for `drive.file`         |
 | `service_account_file>`         | leave empty                                         |
 | `Edit advanced config?`         | `n`                                                 |
