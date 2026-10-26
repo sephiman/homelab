@@ -28,6 +28,13 @@ sudo -n /usr/local/bin/homelab-manage.sh update  <project>      # needs the user
 sudo -n /usr/local/bin/homelab-manage.sh restart-docker         # needs the user's explicit yes; restarts everything
 ```
 
+Your own network access is firewalled on purpose: from your shell, connections to services on
+this host (`127.0.0.1:8123`, `:3100`, `:9090`, …) and to Docker container IPs (`172.x`) are dropped
+and **time out**. A timeout there says nothing about the service — never diagnose from `curl`,
+`/dev/tcp`, sockets or `ps` probes of your own. Check services only through the wrapper, which
+runs outside that firewall: `metrics 'up{job="homeassistant"}'`, `alerts`, `ha-log`, `logs`,
+`loki-errors`, `inspect`.
+
 `<project>` is a Compose project name exactly as shown by `projects` — names keep their hyphens
 (`crypto-ambush`, `home-automation`, `shared-ledger`). Run `projects` first when unsure. Anything the wrapper rejects
 is rejected on purpose; don't try to work around it.
