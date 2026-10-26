@@ -44,11 +44,22 @@ configured_provider() {
     "$SCRIPT_DIR/config.yaml" | head -n 1
 }
 
+env_value() {
+  sed -n "s/^$1=//p" "$SCRIPT_DIR/.env"
+}
+
+is_unset() {
+  [[ -z "$1" || "$1" == changeme ]]
+}
+
 # Prints PROVIDER_VAR=<value of generic_var> for the provider of a config section.
 provider_key_line() {
   local generic_var="$1" section="$2" value provider key_var
-  value="$(sed -n "s/^$generic_var=//p" "$SCRIPT_DIR/.env")"
-  [[ -n "$value" ]] || return 0
+  value="$(env_value "$generic_var")"
+  if is_unset "$value"; then
+    echo "$generic_var not set: no key for the $section provider" >&2
+    return 0
+  fi
   provider="$(configured_provider "$section")"
   [[ -n "$provider" ]] || die "$generic_var is set but config.yaml has no $section provider"
   key_var="${PROVIDER_KEY_VARS[$provider]:-}"
@@ -169,8 +180,12 @@ EOF
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
   step "Installing secrets from hermes/.env"
-  db_password="$(sed -n 's/^HERMES_DB_RO_PASSWORD=//p' "$SCRIPT_DIR/.env")"
-  [[ -n "$db_password" && "$db_password" != changeme ]] || die "set HERMES_DB_RO_PASSWORD in hermes/.env"
+  db_password="$(env_value HERMES_DB_RO_PASSWORD)"
+  ! is_unset "$db_password" || die "set HERMES_DB_RO_PASSWORD in hermes/.env"
+  # Hermes' .env is rewritten below, so a key set only through `hermes setup` / `/model` would be
+  # lost; without this the gateway starts and every request fails with a 401.
+  ! is_unset "$(env_value LLM_API_KEY)" ||
+    die "set LLM_API_KEY in hermes/.env (exactly 'LLM_API_KEY=<key>', no spaces): the key of the config.yaml model provider"
   # Built first so an unmapped provider stops the script before the old .env is replaced.
   env_content="$(hermes_env)"
   printf '%s\n' "$env_content" | install_secret "$HERMES_HOME_DIR/.hermes/.env"

@@ -3,9 +3,12 @@
 # then `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
 
 # Any Hermes provider works; README "Choosing a model" lists options. Its key goes in LLM_API_KEY.
+# base_url is pinned too: managed keys merge per leaf, so a base_url left in ~hermes/.hermes/config.yaml
+# by an earlier provider would otherwise be used with this one (requests went to OpenRouter's URL).
 model:
   default: deepseek-v4.1-flash
   provider: opencode-go
+  base_url: https://opencode.ai/zen/go/v1
 
 terminal:
   backend: local

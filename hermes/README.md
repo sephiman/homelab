@@ -291,11 +291,17 @@ if the bot calls the wrapper wrongly or stops asking before restarts, try a stro
 To switch, edit `model:` in this folder's `config.yaml` (the key always goes in `LLM_API_KEY`):
 
 ```bash
-nano hermes/config.yaml                               # model.provider / model.default
+nano hermes/config.yaml                               # model.provider / model.default / model.base_url
 nano hermes/.env                                      # LLM_API_KEY=<that provider's key>
 sudo ./install-host.sh                                # from hermes/; prints which variable it used
 sudo systemctl restart hermes-gateway
 ```
+
+Always change `model.base_url` together with the provider (each provider's URL is in its docs;
+OpenRouter's is `https://openrouter.ai/api/v1`). It is pinned because managed keys merge per
+leaf: a `base_url` left in Hermes' own `config.yaml` by an earlier provider would otherwise be
+sent with the new one's key — the symptom is `401 Missing Authentication header` and
+`base_url=<the old URL>` in `~hermes/.hermes/logs/agent.log`.
 
 `hermes model` / `hermes config set` refuse to change these keys: `config.yaml` is installed as
 Hermes' managed config (`/etc/hermes/config.yaml`). `install-host.sh` reads the provider from it
