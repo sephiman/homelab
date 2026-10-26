@@ -4,8 +4,8 @@
 
 # Any Hermes provider works; README "Choosing a model" lists options. Its key goes in LLM_API_KEY.
 model:
-  default: nvidia/nemotron-3-ultra-550b-a55b:free
-  provider: openrouter
+  default: deepseek-v4.1-flash
+  provider: opencode-go
 
 terminal:
   backend: local
@@ -45,11 +45,10 @@ providers:
     api: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY
 
-# Used when the primary fails (e.g. OpenRouter's per-account free-models-per-day limit, which no
-# other OpenRouter :free model escapes). Its key goes in FALLBACK_API_KEY.
+# Used when the primary fails (e.g. a Go usage window is spent). Its key goes in FALLBACK_API_KEY.
 fallback_providers:
-  - provider: gemini
-    model: gemini-3.5-flash-lite
+  - provider: openrouter
+    model: nvidia/nemotron-3-ultra-550b-a55b:free
 
 # A small model's background "self-improvement review" saved wrong conclusions about the wrapper
 # as skills/memory that then overrode AGENTS.md. Hold every write for approval (`/memory pending`).
