@@ -19,6 +19,9 @@ readonly DEFAULT_SEARCH_HOURS=24
 readonly MAX_SEARCH_HOURS=720  # Loki keeps 30 days
 readonly MAX_QUERY_CHARS=500
 readonly ERROR_PATTERN='(?i)(error|exception|fatal|panic|traceback)'
+# Tags with a full version (1.37.4, v0.5.0, 5.21.1.1-ls123) are pinned; anything else floats.
+readonly PINNED_TAG_PATTERN='^v?[0-9]+\.[0-9]+\.[0-9]+'
+readonly MANIFEST_TYPES='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
 # Full "Authorization: Bearer …" line, root-only, passed to curl as a file so the token never
 # shows up in a process list.
 readonly HA_AUTH_HEADER_FILE=/etc/homelab-manage/ha_auth_header
@@ -80,7 +83,8 @@ usage: sudo -n homelab-manage.sh <action> [args]
   media-releases <radarr> <title> | <sonarr> <title> <season>
                                search indexers now and list releases with why each is rejected
                                (slow; grabs nothing)
-  daily-report                 one-page summary: alerts, backup, disk, errors, updates, media, HA
+  daily-report                 one-page summary: alerts, backup, disk, errors, updates (Ubuntu,
+                               git, images), media, HA
 EOF
   exit 2
 }
@@ -531,6 +535,92 @@ media_releases() {
     end'
 }
 
+compose_projects() {
+  docker ps --all --format '{{.Label "com.docker.compose.project"}}' | grep -v '^$' | sort -u
+}
+
+# Commits upstream that touch the project's folder; `update <project>` pulls and redeploys them.
+# Runs in a subshell per project because resolve_project dies on a project whose folder is gone.
+pending_git_updates() {
+  local project
+  for project in $(compose_projects); do
+    (
+      resolve_project "$project"
+      is_git_checkout || exit 0
+      owner_git fetch --quiet 2>/dev/null || { echo "$project: git fetch failed"; exit 0; }
+      incoming="$(owner_git log --oneline 'HEAD..@{upstream}' -- . 2>/dev/null)" || exit 0
+      [[ -n "$incoming" ]] || exit 0
+      if owner_git merge-base --is-ancestor HEAD '@{upstream}'; then
+        pull="fast-forward"
+      else
+        pull="DIVERGED, git pull --ff-only will fail"
+      fi
+      changes="$(owner_git status --porcelain --untracked-files=no | wc -l)"
+      echo "$project: $(wc -l <<<"$incoming") commits to pull ($pull, $changes local changes)"
+      head -n 5 <<<"$incoming" | sed 's/^/  /'
+    ) || true
+  done
+}
+
+# Digest the registry serves for a tag right now, asked anonymously with HEAD (which doesn't count
+# against Docker Hub's pull limit). Prints nothing for private images.
+registry_digest() {
+  local registry="$1" repository="$2" tag="$3" url challenge realm service token
+  url="https://$registry/v2/$repository/manifests/$tag"
+  challenge="$(curl -sS --max-time 15 -o /dev/null -D - -I "$url" | tr -d '\r' |
+    grep -i '^www-authenticate: bearer')" || return 1
+  realm="$(sed -nE 's/.*realm="([^"]+)".*/\1/p' <<<"$challenge")"
+  service="$(sed -nE 's/.*service="([^"]+)".*/\1/p' <<<"$challenge")"
+  token="$(curl -fsS --max-time 15 -G "$realm" --data-urlencode "service=$service" \
+    --data-urlencode "scope=repository:$repository:pull" 2>/dev/null | jq -r '.token // .access_token')" ||
+    return 1
+  curl -fs --max-time 15 -I -H @<(printf 'Authorization: Bearer %s\n' "$token") \
+    -H "Accept: $MANIFEST_TYPES" "$url" |
+    tr -d '\r' | awk 'tolower($1) == "docker-content-digest:" { print $2 }'
+}
+
+# Containers on a floating tag (none, latest, major-only like postgres:18 or v3) whose tag now
+# points to a newer image upstream; `update <project>` pulls and recreates them. Exact versions
+# (1.37.4) are someone's deliberate pin, digests and locally built images can't move.
+pending_image_updates() {
+  local container project image image_id name tag built_by repo_digests registry repository remote checked=0
+  while IFS=$'\t' read -r container project image image_id; do
+    [[ "$image" != *@* ]] || continue
+    name="${image%:*}"
+    tag="${image##*:}"
+    if [[ "$name" == "$image" || "$tag" == */* ]]; then
+      name="$image"
+      tag=latest
+    fi
+    [[ ! "$tag" =~ $PINNED_TAG_PATTERN ]] || continue
+    # Compose labels the images it builds; those have nothing to pull. A removed image is skipped.
+    IFS='|' read -r built_by repo_digests < <(docker image inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}|{{range .RepoDigests}}{{.}} {{end}}' \
+      "$image_id" 2>/dev/null) || continue
+    [[ -z "$built_by" && -n "$repo_digests" ]] || continue
+    if [[ "${name%%/*}" == *[.:]* && "${name%%/*}" != docker.io ]]; then
+      registry="${name%%/*}"
+      repository="${name#*/}"
+    else
+      registry=registry-1.docker.io
+      repository="${name#docker.io/}"
+      [[ "$repository" == */* ]] || repository="library/$repository"
+    fi
+    checked=$((checked + 1))
+    remote="$(registry_digest "$registry" "$repository" "$tag")" || remote=""
+    if [[ -z "$remote" ]]; then
+      echo "$project/$container ($image): could not check the registry"
+    elif ! grep -qF "@$remote" <<<"$repo_digests"; then
+      echo "$project/$container ($image): newer image available"
+    fi
+  done < <(docker ps --all --quiet | xargs --no-run-if-empty docker inspect --type container | jq -r '
+    .[]
+    | select(.Config.Labels["com.docker.compose.project"])
+    | [(.Name | ltrimstr("/")), .Config.Labels["com.docker.compose.project"], .Config.Image, .Image]
+    | @tsv')
+  echo "($checked containers on floating tags checked)"
+}
+
 # Everything the morning summary needs in one call, so the scheduled run uses no tools.
 daily_report() {
   echo "=== alerts"
@@ -549,6 +639,10 @@ daily_report() {
   echo "=== pending Ubuntu updates"
   apt list --upgradable 2>/dev/null | grep -c -- '-security' | sed 's/$/ security/' || true
   apt list --upgradable 2>/dev/null | tail -n +2 | wc -l | sed 's/$/ total/' || true
+  echo "=== projects with commits to pull (update <project> pulls and rebuilds)"
+  pending_git_updates | grep . || echo "none"
+  echo "=== containers on floating tags with a newer image (update <project> pulls and recreates)"
+  pending_image_updates || true
   echo "=== media"
   media_health 2>&1 || true
   echo "=== Home Assistant: unavailable entities and low batteries"

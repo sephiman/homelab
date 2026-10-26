@@ -104,7 +104,7 @@ sudo -n /usr/local/bin/homelab-manage.sh loki-search <project> <text> [hours]   
 sudo -n /usr/local/bin/homelab-manage.sh loki-errors [project] [hours]           # errors across everything, or one project
 sudo -n /usr/local/bin/homelab-manage.sh metrics '<promql>'                      # e.g. metrics 'container_memory_usage_bytes{name="tradelog-backend"}'
 sudo -n /usr/local/bin/homelab-manage.sh alerts                                  # alerts pending/firing now
-sudo -n /usr/local/bin/homelab-manage.sh daily-report                            # alerts, backup, disk, errors, updates, media, HA in one page
+sudo -n /usr/local/bin/homelab-manage.sh daily-report                            # alerts, backup, disk, errors, updates (Ubuntu, git, images), media, HA
 ```
 
 - Prefer `loki-search` / `loki-errors` over `logs` for anything older than the current container,
