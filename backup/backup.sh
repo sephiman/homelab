@@ -11,8 +11,46 @@ RCLONE_PATH="${RCLONE_PATH:-homelab-backups}"
 LOCAL_KEEP="${LOCAL_KEEP:-1}"
 REMOTE_RETENTION_DAYS="${REMOTE_RETENTION_DAYS:-7}"
 PG_EXCLUDE_DATABASES="${PG_EXCLUDE_DATABASES:-}"
+# Read by node-exporter's textfile collector; Prometheus alerts on failed or stale backups.
+METRICS_FILE=/metrics/backup.prom
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+previous_metric() {
+  sed -n "s/^$1 //p" "${METRICS_FILE}" 2>/dev/null || true
+}
+
+# Runs on every exit, so a failed run is recorded too; success time and size keep the last success.
+write_metrics() {
+  local status=$? now success last_success size_bytes
+  [ -d "$(dirname "${METRICS_FILE}")" ] || return 0
+  now="$(date +%s)"
+  if [ "${status}" -eq 0 ]; then
+    success=1
+    last_success="${now}"
+    size_bytes="$(du -sb "${DEST}" | cut -f1)"
+  else
+    success=0
+    last_success="$(previous_metric homelab_backup_last_success_timestamp_seconds)"
+    size_bytes="$(previous_metric homelab_backup_size_bytes)"
+  fi
+  cat > "${METRICS_FILE}.tmp" <<EOF
+# HELP homelab_backup_last_run_timestamp_seconds When the last backup run ended.
+# TYPE homelab_backup_last_run_timestamp_seconds gauge
+homelab_backup_last_run_timestamp_seconds ${now}
+# HELP homelab_backup_last_run_success 1 if the last backup run finished, 0 if it failed.
+# TYPE homelab_backup_last_run_success gauge
+homelab_backup_last_run_success ${success}
+# HELP homelab_backup_last_success_timestamp_seconds When the last successful backup ended.
+# TYPE homelab_backup_last_success_timestamp_seconds gauge
+homelab_backup_last_success_timestamp_seconds ${last_success:-0}
+# HELP homelab_backup_size_bytes Size of the last successful backup.
+# TYPE homelab_backup_size_bytes gauge
+homelab_backup_size_bytes ${size_bytes:-0}
+EOF
+  mv "${METRICS_FILE}.tmp" "${METRICS_FILE}"
+}
+trap write_metrics EXIT
 
 log "=== Backup started: ${TIMESTAMP} ==="
 mkdir -p "${DEST}"

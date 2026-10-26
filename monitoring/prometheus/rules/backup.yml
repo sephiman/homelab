@@ -1,0 +1,21 @@
+groups:
+  - name: backup
+    rules:
+      - alert: BackupFailed
+        # Written by backup/backup.sh at the end of every run (node-exporter textfile collector).
+        expr: homelab_backup_last_run_success == 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Last backup run failed"
+          description: "See `docker compose logs backup` in backup/ for the failing step."
+
+      - alert: BackupStale
+        # Daily at 03:05; 26h leaves room for a slow upload. Also fires if the backup container is gone.
+        expr: time() - homelab_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No successful backup for {{ $value | humanizeDuration }}"
+          description: "The backup container may be stopped, or every run since then failed."

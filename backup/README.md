@@ -123,6 +123,23 @@ To run a backup on demand:
 docker compose exec backup /usr/local/bin/backup.sh
 ```
 
+## Monitoring
+
+Every run, successful or not, ends by writing `${HOME}/backup/metrics/backup.prom`, which the
+monitoring stack's node-exporter reads (textfile collector):
+
+| Metric | Meaning |
+|--------|---------|
+| `homelab_backup_last_run_timestamp_seconds` | when the last run ended |
+| `homelab_backup_last_run_success` | `1` if it finished, `0` if a step failed |
+| `homelab_backup_last_success_timestamp_seconds` | when the last successful run ended |
+| `homelab_backup_size_bytes` | size of the last successful backup |
+
+`monitoring/prometheus/rules/backup.yml` turns them into `BackupFailed` and `BackupStale` (no
+success for 26 h — also what you get when this container is stopped). Until the first run after
+deploying, the metrics don't exist and neither alert can fire. Hermes reads all of this with
+`backup-status`.
+
 ## Restore
 
 Download a backup folder (or take it from `${HOME}/backup/archives`):

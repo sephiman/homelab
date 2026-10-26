@@ -145,11 +145,14 @@ services:
       - "--path.rootfs=/rootfs"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
       - "--no-collector.thermal_zone"
+      - "--collector.textfile.directory=/textfile"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
       - /run/udev:/run/udev:ro
+      # backup.prom written by the backup stack after each run.
+      - ${HOME}/backup/metrics:/textfile:ro
     pid: host
     restart: unless-stopped
     labels:

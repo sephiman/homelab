@@ -60,3 +60,8 @@ skills:
 
 # Strangers get silence, not a pairing code.
 unauthorized_dm_behavior: ignore
+
+# Scheduled runs get no tools: their pre-run scripts (hermes/scripts/) collect the data, so a run
+# nobody watches can't restart or update anything. A job can still opt in with enabled_toolsets.
+platform_toolsets:
+  cron: []

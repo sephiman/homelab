@@ -21,6 +21,8 @@ services:
       - ${HOME}/backup/config/rclone:/config/rclone
       # Local backup archives (staging + short local history).
       - ${HOME}/backup/archives:/backups
+      # Last run's result for Prometheus (node-exporter textfile collector, monitoring stack).
+      - ${HOME}/backup/metrics:/metrics
       # Sources mounted read-only.
       - ${HOME}/homeassistant:/sources/homeassistant:ro
       - ${HOME}/qbittorrent:/sources/qbittorrent:ro

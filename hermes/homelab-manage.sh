@@ -10,8 +10,11 @@ readonly HA_URL=http://127.0.0.1:8123
 readonly HA_CONTAINER=homeassistant
 readonly DEFAULT_LOGBOOK_HOURS=24
 readonly MAX_LOGBOOK_HOURS=168
+readonly MAX_HISTORY_HOURS_AGO=720
 readonly LOKI_URL=http://127.0.0.1:3100
 readonly PROMETHEUS_URL=http://127.0.0.1:9090
+readonly BACKUP_CONTAINER=backup
+readonly VPN_CONTAINER=gluetun
 readonly DEFAULT_SEARCH_HOURS=24
 readonly MAX_SEARCH_HOURS=720  # Loki keeps 30 days
 readonly MAX_QUERY_CHARS=500
@@ -21,6 +24,8 @@ readonly ERROR_PATTERN='(?i)(error|exception|fatal|panic|traceback)'
 readonly HA_AUTH_HEADER_FILE=/etc/homelab-manage/ha_auth_header
 # Attributes that can carry secrets or the home's location never leave the wrapper.
 readonly HA_HIDDEN_ATTRIBUTES='token|password|secret|key|picture|latitude|longitude|gps'
+# Anyone who knows a webhook id can trigger its automation from outside.
+readonly HA_HIDDEN_CONFIG_KEYS="$HA_HIDDEN_ATTRIBUTES|webhook_id"
 readonly MAX_LINES=500
 readonly MAX_CODE_BYTES=200000
 # Committed by mistake or not, files named like secrets are never shown.
@@ -44,6 +49,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
   status  <project>            docker compose ps for one project
   logs    <project> [lines]    last log lines of a project (default 100, max 500)
   inspect <container>          state, health, image, networks, ports, mounts (never env)
+  databases                    which Postgres database each container uses (only the name, from its env)
   journal [lines]              docker.service journal (default 100, max 500)
   restart <project>            docker compose restart
   git-status <project>         branch, commits behind/ahead of the remote, last commits, local changes
@@ -58,11 +64,23 @@ usage: sudo -n homelab-manage.sh <action> [args]
   ha-automations               automations: state, last triggered, name (spot off/unavailable ones)
   ha-log [lines]               Home Assistant container log (default 100, max 500)
   ha-logbook [hours] [entity_id]   what changed when and what caused it (default 24h, max 168h; last 500)
+  ha-automation <automation.entity>   one automation's triggers, conditions and actions (automations.yaml)
+  ha-history <entity_id> [hours] [ending_hours_ago]   state changes of one entity, sensors included
+                               (default 24h ending now, max 168h, ending up to 720h ago; last 500)
   ha-light <on|off|toggle> <light.entity>   switch a light — the only Home Assistant write allowed
   loki-search <project> <text> [hours]   log lines containing text, any container of a project (default 24h, max 720h; newest 500)
   loki-errors [project] [hours]          error/exception/fatal/panic lines, one project or all (same limits)
   metrics <promql>             one Prometheus instant query (max 500 chars)
-  alerts                       Prometheus alerts currently pending or firing
+  alerts                       Prometheus alerts currently pending or firing, with their labels
+  backup-status                last backup: files, checksums, log, copies on Google Drive
+  vpn-status                   gluetun health and its public IP vs. the host's (torrent leak check)
+  media-health                 Sonarr/Radarr/Prowlarr health checks (indexers, download client…)
+  media-queue                  Sonarr/Radarr download queue with status and error messages
+  media-title <sonarr|radarr> <title>   library entry, missing episodes and grab/import history
+  media-releases <radarr> <title> | <sonarr> <title> <season>
+                               search indexers now and list releases with why each is rejected
+                               (slow; grabs nothing)
+  daily-report                 one-page summary: alerts, backup, disk, errors, updates, media, HA
 EOF
   exit 2
 }
@@ -198,10 +216,14 @@ ha_light() {
 
 # Timestamps come from jq rather than `date -d`, whose relative-date parsing differs between GNU
 # coreutils and the uutils that Ubuntu 26.04 ships.
+utc_hours_ago() {
+  jq -rn --argjson hours "$1" 'now - $hours * 3600 | strftime("%Y-%m-%dT%H:%M:%SZ")'
+}
+
 ha_logbook() {
   local hours="$1" entity="$2" start end query
-  start="$(jq -rn --argjson hours "$hours" 'now - $hours * 3600 | strftime("%Y-%m-%dT%H:%M:%SZ")')"
-  end="$(jq -rn 'now | strftime("%Y-%m-%dT%H:%M:%SZ")')"
+  start="$(utc_hours_ago "$hours")"
+  end="$(utc_hours_ago 0)"
   query="end_time=$end"
   if [[ -n "$entity" ]]; then
     query+="&entity=$entity"
@@ -211,6 +233,69 @@ ha_logbook() {
     | [.when, (.entity_id // ""), (.state // .message // ""), (.name // ""),
        ("by: " + (.context_name // .context_entity_id // .context_event_type // "-"))]
     | @tsv' | tail -n "$MAX_LINES"
+}
+
+# Unlike the logbook, history includes sensors with a unit (temperature, lux, power), which is what
+# numeric_state triggers and conditions watch.
+ha_history() {
+  local entity="$1" hours="$2" ending_hours_ago="$3" start end
+  start="$(utc_hours_ago $((hours + ending_hours_ago)))"
+  end="$(utc_hours_ago "$ending_hours_ago")"
+  ha_get "history/period/$start?filter_entity_id=$entity&end_time=$end&minimal_response&no_attributes" |
+    jq -r '(.[0] // [])[] | [.last_changed, .state] | @tsv' | tail -n "$MAX_LINES"
+}
+
+ha_config_dir() {
+  docker inspect --type container \
+    --format '{{range .Mounts}}{{if eq .Destination "/config"}}{{.Source}}{{end}}{{end}}' "$HA_CONTAINER"
+}
+
+# Prints the automations.yaml list item whose `id:` is $1 (the file the automation editor writes).
+automation_config_block() {
+  awk -v id="$1" -v quote="'" '
+    function flush() {
+      if (found) printf "%s", block
+      block = ""
+      found = 0
+    }
+    /^- / { flush() }
+    { block = block $0 "\n" }
+    match($0, /^(- |  )id:/) {
+      value = substr($0, RLENGTH + 1)
+      gsub(quote, "", value)
+      gsub(/[" \t\r]/, "", value)
+      if (value == id) found = 1
+    }
+    END { flush() }'
+}
+
+mask_hidden_config_values() {
+  awk -v hidden="$HA_HIDDEN_CONFIG_KEYS" '
+    match(tolower($0), "^[ -]*[a-z_]*(" hidden ")[a-z_]*:") { print substr($0, 1, RLENGTH) " <hidden>"; next }
+    { print }'
+}
+
+ha_automation() {
+  local entity="$1" state config_id file block
+  state="$(ha_get "states/$entity")"
+  jq -r '"\(.entity_id): \(.state), mode \(.attributes.mode // "-"), last triggered \(.attributes.last_triggered // "never")"' <<<"$state"
+  config_id="$(jq -r '.attributes.id // empty' <<<"$state")"
+  [[ -n "$config_id" ]] || die "$entity has no id: it is defined in YAML outside automations.yaml, which the wrapper doesn't read"
+  file="$(ha_config_dir)/automations.yaml"
+  [[ -f "$file" ]] || die "automations.yaml not found in the Home Assistant config folder"
+  block="$(automation_config_block "$config_id" <"$file")"
+  [[ -n "$block" ]] || die "no automation with id '$config_id' in automations.yaml (defined elsewhere?)"
+  head -c "$MAX_CODE_BYTES" <<<"$block" | mask_hidden_config_values
+}
+
+# Default 24, capped at MAX_LOGBOOK_HOURS.
+ha_hours_arg() {
+  local hours="${1:-$DEFAULT_LOGBOOK_HOURS}"
+  [[ "$hours" =~ ^[0-9]{1,3}$ && "$hours" -ge 1 ]] || die "hours must be a number"
+  if (( hours > MAX_LOGBOOK_HOURS )); then
+    hours=$MAX_LOGBOOK_HOURS
+  fi
+  echo "$hours"
 }
 
 hours_arg() {
@@ -230,7 +315,7 @@ require_project_name() {
 # arbitrarily heavy; jq's tojson quotes the search text as a LogQL string.
 loki_query() {
   local logql="$1" hours="$2" start
-  start="$(jq -rn --argjson hours "$hours" 'now - $hours * 3600 | strftime("%Y-%m-%dT%H:%M:%SZ")')"
+  start="$(utc_hours_ago "$hours")"
   curl -fsS --max-time 30 -G "$LOKI_URL/loki/api/v1/query_range" \
     --data-urlencode "query=$logql" --data-urlencode "start=$start" \
     --data-urlencode "limit=$MAX_LINES" --data-urlencode "direction=backward" |
@@ -269,7 +354,212 @@ prometheus_query() {
 
 prometheus_alerts() {
   curl -fsS --max-time 15 "$PROMETHEUS_URL/api/v1/alerts" |
-    jq -r '.data.alerts[] | [.state, .labels.alertname, (.labels.severity // "-"), .activeAt, (.annotations.summary // "")] | @tsv'
+    jq -r '.data.alerts[]
+      | [.state, .labels.alertname, (.labels.severity // "-"), .activeAt, (.annotations.summary // ""),
+         (.labels | del(.alertname, .severity) | to_entries | map("\(.key)=\(.value)") | join(","))]
+      | @tsv'
+}
+
+container_mount_source() {
+  docker inspect --type container \
+    --format "{{range .Mounts}}{{if eq .Destination \"$2\"}}{{.Source}}{{end}}{{end}}" "$1"
+}
+
+# Prints one variable of a container's env; used for API keys, which never leave the wrapper.
+container_env_value() {
+  docker inspect --type container "$1" |
+    jq -r --arg key "$2" '.[0].Config.Env[] | select(startswith($key + "=")) | ltrimstr($key + "=")'
+}
+
+backup_status() {
+  local archives latest
+  archives="$(container_mount_source "$BACKUP_CONTAINER" /backups)"
+  [[ -n "$archives" && -d "$archives" ]] || die "no $BACKUP_CONTAINER container with a /backups folder"
+  latest="$(find "$archives" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 1)"
+  [[ -n "$latest" ]] || die "no local backup in $archives"
+  echo "--- latest local backup: $(basename "$latest")"
+  ls -lh "$latest" | tail -n +2
+  echo "--- checksums"
+  if [[ ! -f "$latest/SHA256SUMS" ]]; then
+    echo "no SHA256SUMS: this run stopped before finishing (see the log below)"
+  else
+    (cd "$latest" && timeout 900 sha256sum -c --quiet SHA256SUMS && echo "all files match SHA256SUMS") ||
+      echo "CHECKSUM CHECK FAILED (see above)"
+  fi
+  echo "--- backup log (last run)"
+  docker logs --tail 300 "$BACKUP_CONTAINER" 2>&1 |
+    grep -E '===|ready|Uploading|ERROR|Error|error|FAILED|failed|denied' | tail -n 25 || true
+  echo "--- on Google Drive"
+  timeout 120 docker exec "$BACKUP_CONTAINER" sh -c \
+    'rclone lsf --dirs-only "$RCLONE_REMOTE:$RCLONE_PATH" && echo "latest:" &&
+     rclone size "$RCLONE_REMOTE:$RCLONE_PATH/$1"' sh "$(basename "$latest")" 2>&1 | tail -n 20
+}
+
+# qBittorrent shares gluetun's network, so gluetun's public IP is the one torrents use.
+vpn_status() {
+  local vpn_info host_ip vpn_ip
+  docker inspect --type container --format \
+    '{{.Name}}: {{.State.Status}}, health {{with index .State "Health"}}{{.Status}}{{else}}none{{end}}' \
+    "$VPN_CONTAINER"
+  vpn_info="$(docker exec "$VPN_CONTAINER" wget -qO- -T 15 https://ipinfo.io/json 2>&1)" ||
+    die "no internet through the VPN: $vpn_info"
+  vpn_ip="$(jq -r '.ip' <<<"$vpn_info")"
+  host_ip="$(curl -fsS --max-time 15 https://ipinfo.io/ip)" || host_ip=unknown
+  jq -r '"VPN exit: \(.ip) \(.city // ""), \(.country // "") (\(.org // ""))"' <<<"$vpn_info"
+  if [[ "$vpn_ip" == "$host_ip" ]]; then
+    echo "WARNING: the VPN exit IP is the host's own public IP — torrent traffic is not tunnelled"
+  else
+    echo "leak check: OK (differs from the host's public IP)"
+  fi
+}
+
+# Sets ARR_URL, ARR_CONTAINER, ARR_KEY_VAR and ARR_API for sonarr, radarr or prowlarr.
+resolve_arr() {
+  case "$1" in
+    sonarr) ARR_URL=http://127.0.0.1:8989 ARR_API=v3 ;;
+    radarr) ARR_URL=http://127.0.0.1:7878 ARR_API=v3 ;;
+    prowlarr) ARR_URL=http://127.0.0.1:9696 ARR_API=v1 ;;
+    *) die "app must be sonarr or radarr" ;;
+  esac
+  ARR_CONTAINER="$1"
+  ARR_KEY_VAR="${1^^}__AUTH__APIKEY"
+}
+
+# The key goes in through a file descriptor so it never appears in the process list.
+arr_get() {
+  local key
+  key="$(container_env_value "$ARR_CONTAINER" "$ARR_KEY_VAR")"
+  [[ -n "$key" ]] || die "$ARR_CONTAINER has no $ARR_KEY_VAR in its env (media/.env)"
+  curl -fsS --max-time "${ARR_TIMEOUT:-20}" -H @<(printf 'X-Api-Key: %s\n' "$key") \
+    "$ARR_URL/api/$ARR_API/$1"
+}
+
+media_health() {
+  local app
+  for app in sonarr radarr prowlarr; do
+    resolve_arr "$app"
+    echo "--- $app"
+    arr_get health | jq -r 'if length == 0 then "ok" else .[] | "\(.type): \(.message)" end' ||
+      echo "unreachable"
+  done
+}
+
+media_queue() {
+  local app
+  for app in sonarr radarr; do
+    resolve_arr "$app"
+    echo "--- $app"
+    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+      jq -r 'if .totalRecords == 0 then "empty" else .records[]
+        | [(.series.title // .movie.title // "?")
+           + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
+           .status, (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"),
+           (.timeleft // "-"), .title,
+           ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
+        | @tsv end'
+  done
+}
+
+# Prints the library id of the title, preferring an exact (case-insensitive) title match.
+arr_find_id() {
+  local collection="$1" title="$2" matches
+  matches="$(arr_get "$collection" | jq -c --arg title "$title" '
+    [.[] | select(.title | ascii_downcase | contains($title | ascii_downcase))]
+    | (map(select(.title | ascii_downcase == ($title | ascii_downcase)))) as $exact
+    | if ($exact | length) == 1 then $exact else . end')"
+  case "$(jq length <<<"$matches")" in
+    0) die "no '$title' in the $ARR_CONTAINER library (it was never added, or the title differs)" ;;
+    1) jq -r '.[0].id' <<<"$matches" ;;
+    *) jq -r '.[] | "  \(.title) (\(.year))"' <<<"$matches" | head -n 15 >&2
+       die "several titles match '$title'; use the full title" ;;
+  esac
+}
+
+quality_profile_name() {
+  arr_get qualityprofile | jq -r --argjson id "$1" '.[] | select(.id == $id) | .name'
+}
+
+media_title() {
+  local app="$1" title="$2" id entry
+  resolve_arr "$app"
+  if [[ "$app" == radarr ]]; then
+    id="$(arr_find_id movie "$title")"
+    entry="$(arr_get "movie/$id")"
+    jq -r '"\(.title) (\(.year)): monitored \(.monitored), downloaded \(.hasFile), status \(.status), available \(.isAvailable) (minimum availability: \(.minimumAvailability))"' <<<"$entry"
+    echo "quality profile: $(quality_profile_name "$(jq '.qualityProfileId' <<<"$entry")")"
+    echo "--- history (newest first)"
+    arr_get "history/movie?movieId=$id" |
+      jq -r 'sort_by(.date) | reverse | .[:30][]
+        | [.date, .eventType, .sourceTitle, (.data.message // .data.reason // "")] | @tsv'
+  else
+    id="$(arr_find_id series "$title")"
+    entry="$(arr_get "series/$id")"
+    jq -r '"\(.title) (\(.year)): monitored \(.monitored), status \(.status), \(.statistics.episodeFileCount)/\(.statistics.episodeCount) monitored episodes downloaded"' <<<"$entry"
+    echo "quality profile: $(quality_profile_name "$(jq '.qualityProfileId' <<<"$entry")")"
+    echo "--- aired, monitored, not downloaded"
+    arr_get "episode?seriesId=$id" | jq -r --arg now "$(utc_hours_ago 0)" '
+      [.[] | select(.monitored and (.hasFile | not) and .airDateUtc != null and .airDateUtc < $now)]
+      | if length == 0 then "none" else .[:40][] | "S\(.seasonNumber)E\(.episodeNumber)  aired \(.airDateUtc)  \(.title // "")" end'
+    echo "--- history (newest first)"
+    arr_get "history/series?seriesId=$id&includeEpisode=true" |
+      jq -r 'sort_by(.date) | reverse | .[:30][]
+        | [.date, .eventType, (if .episode then "S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "-" end),
+           .sourceTitle, (.data.message // .data.reason // "")] | @tsv'
+  fi
+}
+
+# An interactive search: the app asks every indexer and explains each rejection, grabbing nothing.
+media_releases() {
+  local app="$1" title="$2" season="${3:-}" id query
+  resolve_arr "$app"
+  if [[ "$app" == radarr ]]; then
+    id="$(arr_find_id movie "$title")"
+    query="release?movieId=$id"
+  else
+    [[ "$season" =~ ^[0-9]{1,3}$ ]] || die "sonarr needs a season number"
+    id="$(arr_find_id series "$title")"
+    query="release?seriesId=$id&seasonNumber=$season"
+  fi
+  ARR_TIMEOUT=180 arr_get "$query" | jq -r '
+    if length == 0 then "no releases found on any indexer" else
+      "\(length) releases, \(map(select(.approved)) | length) acceptable",
+      (sort_by([(.approved | not), -(.seeders // 0)]) | .[:40][]
+       | [(if .approved then "OK" else "rejected" end), .quality.quality.name,
+          "\((.size / 1073741824 * 10 | round) / 10) GB", "seeders \(.seeders // "-")", .indexer, .title,
+          ((.rejections // []) | map(if type == "object" then .reason else . end) | join(" | "))]
+       | @tsv)
+    end'
+}
+
+# Everything the morning summary needs in one call, so the scheduled run uses no tools.
+daily_report() {
+  echo "=== alerts"
+  prometheus_alerts || echo "Prometheus unreachable"
+  echo "=== backup"
+  prometheus_query 'homelab_backup_last_run_success' || true
+  prometheus_query '(time() - homelab_backup_last_success_timestamp_seconds) / 3600' | sed 's/$/ hours since last success/' || true
+  echo "=== disk (used %)"
+  df -h -x tmpfs -x overlay -x devtmpfs -x squashfs -x efivarfs || true
+  echo "=== containers not running or unhealthy"
+  docker ps --all --format '{{.Names}} | {{.Status}}' | grep -vE '\| Up [^(]*$|\(healthy\)' || echo "none"
+  echo "=== restarts in 24h (by container)"
+  prometheus_query 'changes(container_start_time_seconds{name!=""}[24h]) > 0' || true
+  echo "=== error lines in 24h (by container)"
+  loki_errors "" 24 | awk '{print $2}' | sort | uniq -c | sort -rn | head -n 15 || true
+  echo "=== pending Ubuntu updates"
+  apt list --upgradable 2>/dev/null | grep -c -- '-security' | sed 's/$/ security/' || true
+  apt list --upgradable 2>/dev/null | tail -n +2 | wc -l | sed 's/$/ total/' || true
+  echo "=== media"
+  media_health 2>&1 || true
+  echo "=== Home Assistant: unavailable entities and low batteries"
+  if [[ -r "$HA_AUTH_HEADER_FILE" ]]; then
+    ha_get states | jq -r '.[]
+      | select(.state == "unavailable"
+               or (.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20))
+      | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' | head -n 40
+  else
+    echo "not configured"
+  fi
 }
 
 ha_automations() {
@@ -294,6 +584,24 @@ ha_state() {
     entity_id, state, last_changed,
     attributes: (.attributes | with_entries(select(.key | test($hidden; "i") | not)))
   }'
+}
+
+# Database names often differ from project names (curset -> tradeschool) and only the env says so;
+# of the env, only a database name ever leaves this function.
+container_databases() {
+  docker ps --all --quiet | xargs --no-run-if-empty docker inspect --type container | jq -r '
+    .[]
+    | (.Config.Labels["com.docker.compose.project"] // "-") as $project
+    | (.Name | ltrimstr("/")) as $container
+    | .Config.Env[]?
+    | capture("^(?<key>[A-Z0-9_]+)=(?<value>.*)$")
+    | if (.key | test("^(DB_NAME|POSTGRES_DB|PGDATABASE|DATABASE_NAME)$")) then .value
+      elif (.key | test("(DATABASE|DB|DATASOURCE)_URL$")) and (.value | test("^(jdbc:)?postgres"))
+        then .value | capture("/(?<db>[A-Za-z0-9_-]+)(\\?|$)").db
+      else empty end
+    | select(test("^[A-Za-z0-9_-]{1,63}$"))
+    | [$project, $container, .]
+    | @tsv' | sort -u
 }
 
 hold_lock() {
@@ -331,6 +639,10 @@ case "$action" in
     [[ $# -eq 1 ]] || usage
     [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$ ]] || die "invalid container name"
     docker inspect --type container --format "$INSPECT_FORMAT" -- "$1"
+    ;;
+  databases)
+    [[ $# -eq 0 ]] || usage
+    container_databases
     ;;
   journal)
     [[ $# -le 1 ]] || usage
@@ -409,13 +721,23 @@ case "$action" in
     ;;
   ha-logbook)
     [[ $# -le 2 ]] || usage
-    hours="${1:-$DEFAULT_LOGBOOK_HOURS}"
-    [[ "$hours" =~ ^[0-9]{1,3}$ && "$hours" -ge 1 ]] || die "hours must be a number"
-    if (( hours > MAX_LOGBOOK_HOURS )); then
-      hours=$MAX_LOGBOOK_HOURS
-    fi
+    hours="$(ha_hours_arg "${1:-}")"
     [[ -z "${2:-}" || "$2" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
     ha_logbook "$hours" "${2:-}"
+    ;;
+  ha-automation)
+    [[ $# -eq 1 ]] || usage
+    [[ "$1" =~ ^automation\.[a-z0-9_]+$ ]] || die "invalid automation entity_id"
+    ha_automation "$1"
+    ;;
+  ha-history)
+    [[ $# -ge 1 && $# -le 3 ]] || usage
+    [[ "$1" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
+    hours="$(ha_hours_arg "${2:-}")"
+    ending_hours_ago="${3:-0}"
+    [[ "$ending_hours_ago" =~ ^[0-9]{1,3}$ ]] && (( ending_hours_ago <= MAX_HISTORY_HOURS_AGO )) ||
+      die "ending_hours_ago must be 0-$MAX_HISTORY_HOURS_AGO"
+    ha_history "$1" "$hours" "$ending_hours_ago"
     ;;
   loki-search)
     [[ $# -eq 2 || $# -eq 3 ]] || usage
@@ -441,6 +763,38 @@ case "$action" in
   alerts)
     [[ $# -eq 0 ]] || usage
     prometheus_alerts
+    ;;
+  backup-status)
+    [[ $# -eq 0 ]] || usage
+    backup_status
+    ;;
+  vpn-status)
+    [[ $# -eq 0 ]] || usage
+    vpn_status
+    ;;
+  media-health)
+    [[ $# -eq 0 ]] || usage
+    media_health
+    ;;
+  media-queue)
+    [[ $# -eq 0 ]] || usage
+    media_queue
+    ;;
+  media-title)
+    [[ $# -eq 2 ]] || usage
+    [[ "$1" == sonarr || "$1" == radarr ]] || die "app must be sonarr or radarr"
+    (( ${#2} >= 2 && ${#2} <= 100 )) || die "title must be 2-100 characters"
+    media_title "$1" "$2"
+    ;;
+  media-releases)
+    [[ $# -eq 2 || $# -eq 3 ]] || usage
+    [[ "$1" == sonarr || "$1" == radarr ]] || die "app must be sonarr or radarr"
+    (( ${#2} >= 2 && ${#2} <= 100 )) || die "title must be 2-100 characters"
+    media_releases "$1" "$2" "${3:-}"
+    ;;
+  daily-report)
+    [[ $# -eq 0 ]] || usage
+    daily_report
     ;;
   ha-light)
     [[ $# -eq 2 ]] || usage
