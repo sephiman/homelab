@@ -140,8 +140,10 @@ while read -r dir; do
     find "$dir" -maxdepth 2 -name '.env*' ! -name '*.example' -type f -exec chmod 600 {} +
   fi
 done < <(project_dirs)
+# Not 600: Prometheus scrapes HA as nobody (65534), so a root/owner-only token fires HomeAssistantDown.
 if [[ -f "$HOMELAB_DIR/monitoring/prometheus/ha_token" ]]; then
-  chmod 600 "$HOMELAB_DIR/monitoring/prometheus/ha_token"
+  chgrp 65534 "$HOMELAB_DIR/monitoring/prometheus/ha_token"
+  chmod 640 "$HOMELAB_DIR/monitoring/prometheus/ha_token"
 fi
 
 step "Installing /usr/local/bin/homelab-manage.sh"

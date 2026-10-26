@@ -30,7 +30,7 @@ dangerous-command checks on container backends.
 |--------|-----|
 | Any direct Docker command (`prune`, `down -v`, `rm -f`, `run -v /:/host`, …) | `hermes` is not in the `docker` group and has no socket access |
 | Root shell, `/etc`, firewall, formatting disks | sudoers allows only the wrapper; the wrapper rejects any other argument |
-| `.env` files (of every project), `ha_token`, Vaultwarden data, rclone config | The installer sets `chmod 600` on `.env` files in each project folder and checks that the project owners' homes are closed to other users |
+| `.env` files (of every project), `ha_token`, Vaultwarden data, rclone config | The installer sets `chmod 600` on `.env` files in each project folder (`ha_token` gets `640` group `65534`, the only group Prometheus needs) and checks that the project owners' homes are closed to other users |
 | Container env vars via `docker inspect` (`POSTGRES_PASSWORD`, `ADMIN_TOKEN`, …) | The wrapper's `inspect` prints a fixed template that never includes env |
 | `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`; reading Vaultwarden | `hermes_ro` has read-only grants only; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` (do the same for any database Hermes must not read) |
 | LAN, other host services, Docker networks | nftables egress rule for the `hermes` uid: DNS, `127.0.0.1:5432` and outbound 443 only |
