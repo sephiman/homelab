@@ -169,6 +169,9 @@ systemctl restart hermes-egress.service
 step "Preparing $HERMES_HOME_DIR"
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/workspace" "$HERMES_HOME_DIR/.hermes"
 install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HERMES_HOME_DIR/workspace/AGENTS.md"
+# The gateway builds its context from the home dir, not terminal.cwd (hermes-agent issue #11763).
+ln -sfn workspace/AGENTS.md "$HERMES_HOME_DIR/AGENTS.md"
+chown -h "$HERMES_USER:$HERMES_USER" "$HERMES_HOME_DIR/AGENTS.md"
 # Pre-run scripts of the scheduled jobs (README "Scheduled jobs"); root-owned so the agent can't edit them.
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/.hermes/scripts"
 install -o root -g root -m 0755 "$SCRIPT_DIR"/scripts/*.sh "$HERMES_HOME_DIR/.hermes/scripts/"

@@ -81,7 +81,7 @@ can't restart anything. To switch a toolset off entirely, list it under
 | `hermes-gateway.service` | `/etc/systemd/system/hermes-gateway.service` |
 | `config.yaml` | `/etc/hermes/config.yaml` — Hermes' managed config (root-owned; wins over its own config) |
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
-| `AGENTS.md` | `/home/hermes/workspace/AGENTS.md` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
+| `AGENTS.md` | `/home/hermes/workspace/AGENTS.md`, symlinked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs) |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
