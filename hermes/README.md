@@ -83,7 +83,6 @@ can't restart anything. To switch a toolset off entirely, list it under
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
 | `AGENTS.md` | `/home/hermes/workspace/AGENTS.md`, symlinked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs) |
-| `create-cron-jobs.sh` | Not installed; run once as root to create the [scheduled jobs](#scheduled-jobs) |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
 ## Install
@@ -128,6 +127,7 @@ Prerequisites: the `postgres` stack is up and the app stacks have created their 
 
    ```bash
    sudo -iu hermes /home/hermes/.local/bin/hermes config    # managed keys from /etc/hermes/config.yaml
+   sudo ./install-host.sh                                   # again, now that Hermes exists: creates the scheduled jobs
    sudo systemctl enable --now hermes-gateway
    journalctl -u hermes-gateway -f
    ```
@@ -245,16 +245,10 @@ the alert is about those. It remembers what it already reported, so each alert i
 (again only if it resolves and fires again). If Prometheus itself can't be queried, that is
 reported once as `AlertWatcherCannotQueryPrometheus`.
 
-Create them after `install-host.sh` copied the scripts. `create-cron-jobs.sh` holds both
-prompts, delivers to the first id in `TELEGRAM_ALLOWED_USERS`, skips jobs that already exist and
-ends with `hermes cron list`:
-
-```bash
-sudo ./create-cron-jobs.sh
-```
-
-Create them this way, not by asking the bot: a job made from chat has no pre-run script and
-keeps the bot's tools.
+`install-host.sh` creates both once Hermes is installed, delivered to the first id in
+`TELEGRAM_ALLOWED_USERS`; it holds their prompts and leaves jobs that already exist alone. Don't
+create them by asking the bot: a job made from chat has no pre-run script and keeps the bot's
+tools. Check them with `sudo -iu hermes /home/hermes/.local/bin/hermes cron list`.
 
 Besides health, the summary lists projects whose folder has commits upstream that aren't pulled
 yet (and whether `git pull --ff-only` can apply them), and containers on a floating tag (no tag,
