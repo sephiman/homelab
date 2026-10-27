@@ -1,16 +1,6 @@
 groups:
   - name: security
     rules:
-      - alert: CriticalImageVulnerabilities
-        # Counts from Dockhand's image scans (Grype/Trivy); details per image live in Dockhand → Images.
-        expr: sum(dockhand_vulnerabilities{severity="critical"}) > 0
-        for: 1h
-        labels:
-          severity: warning
-        annotations:
-          summary: "{{ $value }} critical vulnerabilities in scanned images"
-          description: "Check Dockhand → Images for the affected images, then update them."
-
       - alert: ImageScansStale
         expr: max(dockhand_scan_oldest_age_seconds) > 7 * 86400
         for: 1h
