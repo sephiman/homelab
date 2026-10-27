@@ -22,7 +22,7 @@ dangerous-command checks on container backends.
 | Backups (`backup-status`): latest local backup, checksum check, backup log, copies on Google Drive | Wrapper reads the archives folder as root and runs `rclone` inside the `backup` container; the rclone config never leaves it |
 | Media (`media-health`, `media-queue`, `media-title`, `media-releases`, `vpn-status`) | Wrapper calls Sonarr/Radarr/Prowlarr read-only endpoints on `127.0.0.1` with the API keys taken from their containers' env, passed to `curl` through a file descriptor (never on a command line). `media-releases` makes the apps search the indexers but grabs nothing. `vpn-status` asks `ipinfo.io` for gluetun's and the host's public IP |
 | Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
-| Postgres: reading every database except Vaultwarden, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; Vaultwarden's DB denies it `CONNECT` |
+| Postgres: reading `crypto_ambush`, `sharedledger`, `tradelog` and `tradeschool`, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; `CONNECT` granted only on those databases |
 | Project source code (`code-ls`, `code-show`, `code-grep`) and `git-pull` | Read from git `HEAD` as the folder's owner — gitignored files (`.env`…) are unreachable and secret-looking files (`.env*`, `*.key`, `*secret*`…) are refused even if committed |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
@@ -32,7 +32,7 @@ dangerous-command checks on container backends.
 | Root shell, `/etc`, firewall, formatting disks | sudoers allows only the wrapper; the wrapper rejects any other argument |
 | `.env` files (of every project), `ha_token`, Vaultwarden data, rclone config | The installer sets `chmod 600` on `.env` files in each project folder (`ha_token` gets `640` group `65534`, the only group Prometheus needs) and checks that the project owners' homes are closed to other users |
 | Container env vars via `docker inspect` (`POSTGRES_PASSWORD`, `ADMIN_TOKEN`, …) | The wrapper's `inspect` prints a fixed template that never includes env |
-| `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`; reading Vaultwarden | `hermes_ro` has read-only grants only; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` (do the same for any database Hermes must not read) |
+| `INSERT` / `UPDATE` / `DELETE` / `DROP` / `ALTER` / `TRUNCATE`; reading Vaultwarden | `hermes_ro` has read-only grants only; `vaultwarden` DB revokes `CONNECT` from `PUBLIC` and `hermes_ro` gets no `CONNECT` grant on it |
 | LAN, other host services, Docker networks | nftables egress rule for the `hermes` uid: DNS, `127.0.0.1:5432` and outbound 443 only |
 
 Hermes' own settings in [`config.yaml`](./config.yaml), installed root-owned as its managed config
@@ -87,7 +87,7 @@ can't restart anything. To switch a toolset off entirely, list it under
 
 ## Install
 
-Prerequisites: the `postgres` stack is up, and you have a Telegram bot token
+Prerequisites: the `postgres` stack is up and the app stacks have created their databases, and you have a Telegram bot token
 ([@BotFather](https://t.me/BotFather)), your numeric Telegram user id
 ([@userinfobot](https://t.me/userinfobot)) and an API key for the model provider you pick ([Choosing a model](#choosing-a-model)).
 
@@ -385,12 +385,15 @@ values, units and relations before writing SQL. It answers with the query it ran
 it took from the code. The code comes from the folder's git `HEAD`, so `git pull` there (or
 `update`) when the schema has changed.
 
-Hermes reads every database it can connect to (`pg_read_all_data`). To keep one out, revoke
-`CONNECT` from `PUBLIC` on it, as `postgres/vaultwarden.sql` does:
+Hermes reads every database it can connect to (`pg_read_all_data`). The app databases revoke
+`CONNECT` from `PUBLIC`, so [`postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) grants it on each
+one Hermes may read. To add another, grant it and add the line to that file:
 
 ```sql
-REVOKE ALL ON DATABASE <database> FROM PUBLIC;
+GRANT CONNECT ON DATABASE <database> TO hermes_ro;
 ```
+
+Vaultwarden gets no grant, so Hermes can't open it.
 
 Whatever it reads goes to the model provider — keep that in mind for financial data on free tiers.
 
