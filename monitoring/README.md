@@ -147,7 +147,7 @@ Prometheus evaluates the rules in `prometheus/rules/*.yml` and pushes firing ale
 
 Alertmanager can't read env vars in its config, so compose hands both values over as secrets (`/run/secrets/telegram_*`) read by `alertmanager/alertmanager.yml`. Left empty, Alertmanager still runs but every send fails with `Unauthorized` in `docker logs alertmanager`.
 
-Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertname`, re-sent every 4h while firing. Silence one for maintenance at http://localhost:9093.
+Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertname`, re-sent every 4h while firing (`ImageScansStale` once a day). Silence one for maintenance at http://localhost:9093.
 
 Baseline rules in `prometheus/rules/home-automation.yml`:
 `HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
