@@ -63,6 +63,8 @@ Config and state live under the home directory of whoever runs Docker (`${HOME}`
 - `${HOME}/homeassistant/config` → `/config` — full HA configuration directory (`configuration.yaml`, integrations, secrets, DB).
 - `/etc/localtime` → `/etc/localtime` (ro) — keeps the container clock aligned with the host timezone.
 
+- `./blueprints/automation` → `/config/blueprints/automation/homelab` (ro) — automation blueprints versioned in this repo. Automations reference them as `homelab/<file>.yaml`; after a `git pull`, reload with *Developer tools → YAML → Automations* (no container restart needed).
+
 ### Zigbee2MQTT
 
 - `${HOME}/homeassistant/zigbee/zigbee2mqtt/zigbee2mqtt-data` → `/app/data` — coordinator state, paired devices, `configuration.yaml`.
@@ -149,6 +151,12 @@ Open http://localhost:8123 and:
 1. Complete the onboarding (admin user, location, units).
 2. *Settings → Devices & services → Add integration → MQTT*. Broker: `mqtt`, port `1883` (anonymous, or with the user you created in Mosquitto).
 3. With MQTT discovery enabled (Zigbee2MQTT publishes it by default), paired Zigbee devices show up automatically.
+
+## Blueprints
+
+| Blueprint | What it does |
+|-----------|--------------|
+| [`simple_motion_light.yaml`](./blueprints/automation/simple_motion_light.yaml) | Motion on → entity on; motion clear for *Off Delay* → off. *Max On Time* (default 15 min) turns it off even if the sensor never reports clear — Hue motion sensors on low battery get stuck on `occupancy: true` for 1–2 h. On HA start it turns the entity off if the sensor is already clear, since `for:` timers don't survive a restart. |
 
 ## Backups
 

@@ -35,6 +35,8 @@ services:
     image: ghcr.io/home-assistant/home-assistant
     volumes:
       - ${HOME}/homeassistant/config:/config
+      # Versioned blueprints, read-only; referenced as `homelab/<file>.yaml`.
+      - ./blueprints/automation:/config/blueprints/automation/homelab:ro
       - /etc/localtime:/etc/localtime:ro
       # Alloy ships HA stdout to Loki — discard the duplicate on-disk log file.
       - /dev/null:/config/home-assistant.log

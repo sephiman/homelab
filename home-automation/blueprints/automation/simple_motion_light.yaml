@@ -1,0 +1,107 @@
+blueprint:
+  name: Simple Motion Light
+  description: >
+    Turn an entity on when a motion sensor triggers. Turn it off after a
+    configurable delay when motion stops. No day/night logic, no lux, no
+    scenes — just motion in, light out. A max-on cap turns the entity off
+    even if the sensor never reports "clear" (stuck occupancy, low battery,
+    lost Zigbee packet), and an HA restart re-checks the state so a lost
+    off-delay timer can't leave the light on.
+  domain: automation
+  source_url: https://github.com/sephiman/homelab/blob/main/home-automation/blueprints/automation/simple_motion_light.yaml
+  input:
+    motion_sensor:
+      name: Motion Sensor
+      description: The binary sensor that detects motion or occupancy.
+      selector:
+        entity:
+          domain: binary_sensor
+    target_entity:
+      name: Entity to Control
+      description: The light, switch, or fan to turn on and off.
+      selector:
+        entity:
+          domain:
+            - light
+            - switch
+            - fan
+    delay_minutes:
+      name: Off Delay (minutes)
+      description: How long to wait after motion stops before turning off.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: minutes
+          mode: box
+    max_on_minutes:
+      name: Max On Time (minutes)
+      description: >
+        Safety cap — turn off after this long on, whatever the sensor says.
+        Applies to manual turn-ons too.
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 240
+          step: 1
+          unit_of_measurement: minutes
+          mode: box
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input motion_sensor
+    to: "on"
+    id: motion_on
+  - trigger: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for:
+      minutes: !input delay_minutes
+    id: motion_off
+  - trigger: state
+    entity_id: !input target_entity
+    to: "on"
+    for:
+      minutes: !input max_on_minutes
+    id: max_on_reached
+  # `for:` timers don't survive a restart.
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: motion_on
+        sequence:
+          - action: homeassistant.turn_on
+            target:
+              entity_id: !input target_entity
+      - conditions:
+          - condition: trigger
+            id:
+              - motion_off
+              - max_on_reached
+        sequence:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: !input target_entity
+      - conditions:
+          - condition: trigger
+            id: ha_start
+          - condition: state
+            entity_id: !input motion_sensor
+            state: "off"
+          - condition: state
+            entity_id: !input target_entity
+            state: "on"
+        sequence:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: !input target_entity
