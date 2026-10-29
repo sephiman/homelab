@@ -5,8 +5,7 @@ blueprint:
     configurable delay when motion stops. No day/night logic, no lux, no
     scenes — just motion in, light out. A max-on cap turns the entity off
     even if the sensor never reports "clear" (stuck occupancy, low battery,
-    lost Zigbee packet), and an HA restart re-checks the state so a lost
-    off-delay timer can't leave the light on.
+    lost Zigbee packet).
   domain: automation
   source_url: https://github.com/sephiman/homelab/blob/main/home-automation/blueprints/automation/simple_motion_light.yaml
   input:
@@ -69,10 +68,6 @@ triggers:
     for:
       minutes: !input max_on_minutes
     id: max_on_reached
-  # `for:` timers don't survive a restart.
-  - trigger: homeassistant
-    event: start
-    id: ha_start
 
 actions:
   - choose:
@@ -88,19 +83,6 @@ actions:
             id:
               - motion_off
               - max_on_reached
-        sequence:
-          - action: homeassistant.turn_off
-            target:
-              entity_id: !input target_entity
-      - conditions:
-          - condition: trigger
-            id: ha_start
-          - condition: state
-            entity_id: !input motion_sensor
-            state: "off"
-          - condition: state
-            entity_id: !input target_entity
-            state: "on"
         sequence:
           - action: homeassistant.turn_off
             target:

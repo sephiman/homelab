@@ -156,7 +156,7 @@ Open http://localhost:8123 and:
 
 | Blueprint | What it does |
 |-----------|--------------|
-| [`simple_motion_light.yaml`](./blueprints/automation/simple_motion_light.yaml) | Motion on → entity on; motion clear for *Off Delay* → off. *Max On Time* (default 15 min) turns it off even if the sensor never reports clear — Hue motion sensors on low battery get stuck on `occupancy: true` for 1–2 h. On HA start it turns the entity off if the sensor is already clear, since `for:` timers don't survive a restart. |
+| [`simple_motion_light.yaml`](./blueprints/automation/simple_motion_light.yaml) | Motion on → entity on; motion clear for *Off Delay* → off. *Max On Time* (default 15 min) turns it off even if the sensor never reports clear — Hue motion sensors on low battery get stuck on `occupancy: true` for 1–2 h. After a restart the sensor's `unknown → off` and the entity's `unknown → on` transitions re-arm both timers, so no startup handling is needed. |
 
 ## Backups
 
