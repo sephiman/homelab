@@ -121,8 +121,11 @@ as_hermes() {
 
 # Usage: schedule_job <name> <schedule> <script> <prompt> <telegram user id>. Existing jobs are kept.
 schedule_job() {
-  local name="$1" schedule="$2" script="$3" prompt="$4" telegram_id="$5"
-  if as_hermes cron list | grep -qw -- "$name"; then
+  local name="$1" schedule="$2" script="$3" prompt="$4" telegram_id="$5" jobs
+  # Listed in full first: `grep -q` stops reading at the first match, Hermes dies of a broken pipe and,
+  # under pipefail, an existing job reads as missing and gets created twice.
+  jobs="$(as_hermes cron list)"
+  if grep -qw -- "$name" <<<"$jobs"; then
     echo "$name: already scheduled"
     return 0
   fi
