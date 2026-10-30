@@ -15,7 +15,7 @@ readonly EQUITY_STALE_DAYS=4
 # `unpriced <symbol>` (left out of the totals), `stale <symbol> <price date or time>`.
 holdings_valuation() {
   psql "service=homelab dbname=sharedledger" -X -q -A -t -F $'\t' -v ON_ERROR_STOP=1 \
-    -v household="$HOUSEHOLD" -v today="$(TZ="$TIMEZONE" date +%F)" \
+    -v household="$HOUSEHOLD" -v timezone="$TIMEZONE" -v today="$(TZ="$TIMEZONE" date +%F)" \
     -v yesterday="$(TZ="$TIMEZONE" date -d yesterday +%F)" \
     -v crypto_stale_hours="$CRYPTO_STALE_HOURS" -v equity_stale_days="$EQUITY_STALE_DAYS" <<'SQL'
 WITH household AS (
