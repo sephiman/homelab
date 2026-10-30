@@ -84,7 +84,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
                                search indexers now and list releases with why each is rejected
                                (slow; grabs nothing)
   daily-report                 one-page summary: alerts, backup, disk, errors, updates (Ubuntu,
-                               git, images), media, HA
+                               git, images), media, HA batteries
 EOF
   exit 2
 }
@@ -645,11 +645,11 @@ daily_report() {
   pending_image_updates || true
   echo "=== media"
   media_health 2>&1 || true
-  echo "=== Home Assistant: unavailable entities and low batteries"
+  # Unavailable entities are left out: they come and go with Zigbee/Wi-Fi drops and are noise here.
+  echo "=== Home Assistant: low batteries"
   if [[ -r "$HA_AUTH_HEADER_FILE" ]]; then
     ha_get states | jq -r '.[]
-      | select(.state == "unavailable"
-               or (.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20))
+      | select(.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20)
       | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' | head -n 40
   else
     echo "not configured"

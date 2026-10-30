@@ -231,12 +231,13 @@ the host's IP. It reports and suggests; it can't grab, delete or change profiles
 
 ## Scheduled jobs
 
-Two jobs, both gathering their data in a pre-run script (`scripts/`, run as `hermes` through the
+Three jobs, each gathering their data in a pre-run script (`scripts/`, run as `hermes` through the
 wrapper) so the model gets one prompt and **no tools**:
 
 | Job | Schedule | Model requests |
 |-----|----------|----------------|
 | Morning summary (`daily-report.sh`) | daily | 1 per day |
+| Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
 
 The alert watcher sends a diagnosis next to Alertmanager's own message: which container, its
@@ -245,7 +246,7 @@ the alert is about those. It remembers what it already reported, so each alert i
 (again only if it resolves and fires again). If Prometheus itself can't be queried, that is
 reported once as `AlertWatcherCannotQueryPrometheus`.
 
-`install-host.sh` creates both once Hermes is installed, delivered to the first id in
+`install-host.sh` creates them once Hermes is installed, delivered to the first id in
 `TELEGRAM_ALLOWED_USERS`; it holds their prompts and leaves jobs that already exist alone. Don't
 create them by asking the bot: a job made from chat has no pre-run script and keeps the bot's
 tools. Check them with `sudo -iu hermes /home/hermes/.local/bin/hermes cron list`.
@@ -257,6 +258,17 @@ versions (`1.37.4`) count as deliberate pins and aren't checked. The image check
 registry anonymously with HEAD requests, which don't count against Docker Hub's pull limit, so
 private images show up as "could not check". Nothing is pulled or redeployed by the report: ask
 Hermes to `update <project>` for that.
+
+The summary only mentions what needs a look; unavailable Home Assistant entities are left out as
+noise (Zigbee/Wi-Fi drops), low batteries are kept.
+
+The holdings report (08:10, after the hourly crypto price refresh) reads the Shared Ledger household
+`casa` (`HOUSEHOLD` in the script) through the read-only `hermes_ro` role and values its active
+crypto and ETF/stock holdings today and yesterday the way the app does: net quantity of BUY minus
+SELL lots traded up to that day × latest price up to that day × FX into the household currency.
+Snapshots aren't used (Casa takes them monthly). It flags crypto prices older than 3 hours, ETF/stock
+prices older than 4 days and holdings with no price or FX rate; while nothing is held it sends
+nothing. All jobs follow `timezone: Europe/Madrid` in `config.yaml`, whatever the host clock says.
 
 Change the summary's language or contents by editing its prompt: `hermes cron edit <job_id>
 --prompt '…'`. Pause one with `hermes cron pause <job_id>`.

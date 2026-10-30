@@ -10,6 +10,8 @@ model:
   provider: opencode-go
   base_url: https://opencode.ai/zen/go/v1
 
+timezone: Europe/Madrid
+
 terminal:
   backend: local
   cwd: /home/hermes/workspace

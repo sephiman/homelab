@@ -96,12 +96,18 @@ install_ha_token() {
 
 # Scheduled jobs (README "Scheduled jobs"); each prompt is the only input of a tool-less run.
 readonly MORNING_SUMMARY_PROMPT='Write the morning summary of the homelab from the Script Output above, in under 15 lines.
-Start with what needs attention (firing alerts, failed or old backup, disks above 80%, stopped
-or unhealthy containers, projects with many errors, security updates, projects with commits to
-pull, containers with a newer image, media health problems, unavailable Home Assistant devices,
-batteries below 20%), then one line saying everything else is fine. For commits to pull or newer
-images, name the project so the user can ask you to update it. Never invent data that is not in
-the output.'
+Mention only what needs a look (firing alerts, failed or old backup, disks above 80%, stopped or
+unhealthy containers, projects with many errors, security updates, projects with commits to pull,
+containers with a newer image, media health problems, batteries below 20%); never list what is
+fine. If nothing needs a look, reply with one line saying all is fine. For commits to pull or
+newer images, name the project so the user can ask you to update it. Never invent data that is
+not in the output.'
+
+readonly HOLDINGS_REPORT_PROMPT='Write the daily portfolio report of the Shared Ledger household from the Script Output above,
+in euros, in 4-5 lines: crypto, ETF+stocks and the total, each with today'"'"'s value and its change
+versus yesterday with sign and percentage. If the output has warnings (stale or missing prices),
+say so on one trailing line. If the output says the query failed, report the error. Never invent
+figures that are not in the output.'
 
 readonly ALERT_DIAGNOSIS_PROMPT='The Script Output above lists alerts that just started firing, plus context gathered for
 them. For each alert: the most likely cause, backed by the lines of the output that show it,
@@ -129,6 +135,7 @@ schedule_jobs() {
   telegram_id="$(env_value TELEGRAM_ALLOWED_USERS | cut -d, -f1 | tr -d "[:space:]\"'")"
   [[ "$telegram_id" =~ ^[0-9]+$ ]] || die "TELEGRAM_ALLOWED_USERS in hermes/.env has no numeric user id"
   schedule_job morning-summary '0 8 * * *' daily-report.sh "$MORNING_SUMMARY_PROMPT" "$telegram_id"
+  schedule_job holdings-report '10 8 * * *' holdings-report.sh "$HOLDINGS_REPORT_PROMPT" "$telegram_id"
   schedule_job alert-diagnosis 'every 5m' alert-watch.sh "$ALERT_DIAGNOSIS_PROMPT" "$telegram_id"
 }
 
