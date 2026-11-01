@@ -280,7 +280,7 @@ as much as its price.
 
 | Provider (`model.provider`) | Model id | Cost | Catch |
 |---|---|---|---|
-| OpenCode Go (`opencode-go`) | `deepseek-v4.1-flash` *(default)*; any id from `https://opencode.ai/inference/go/v1/models` | $10/month subscription; this model is capped at $80 of usage a month (20% per 5 h, 50% per week), billed at $0.15–0.30 per 1M input tokens | DeepSeek models need **Settings › Privacy › Regions → Global** in the OpenCode console (default is Europe + US only), so prompts may be served outside the EU/US. Go is meant for coding agents and watches for abuse; an ops bot is light traffic, but it isn't what Go is sold for |
+| OpenCode Go (`opencode-go`) | `deepseek-v4.1-flash` *(default)*; any id from `https://opencode.ai/inference/go/v1/models` | $10/month subscription; this model is capped at $100 of usage a month (20% per 5 h, 50% per week), billed at $0.15–0.30 per 1M input tokens | DeepSeek models need **Settings › Privacy › Regions → Global** in the OpenCode console (default is Europe + US only), so prompts may be served outside the EU/US. Go is meant for coding agents and watches for abuse; an ops bot is light traffic, but it isn't what Go is sold for |
 | OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(fallback)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
 | Google Gemini (`gemini`) | `gemini-3.8-flash`, `gemini-2.5-flash` | Free tier | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
 | OpenCode Zen (`opencode-zen`) | `glm-5.3-flash`, `deepseek-v4.1-flash` ($0.30 / $1.20) | $0.15 / $0.50 per 1M tokens in/out, prepaid credit | Paid only from Hermes: Zen's `*-free` models answer `403 … can only be used from within OpenCode` |
@@ -315,6 +315,23 @@ key variable in `hermes/.env` instead (any variable there is passed through as-i
 `/model <id>` in Telegram switches only the current chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
 egress firewall until you add a rule for it in `hermes-egress.nft`.
 
+### Aliases and background tasks
+
+Each Go model has its own usage budget (see the [Go model table](https://opencode.ai/docs/go/)), so
+`config.yaml` spreads the work over three of them. They all use the same Go key, so nothing more
+goes in `.env`:
+
+| Alias (`/model <alias>`) | Model | Use it for |
+|---|---|---|
+| `flash` *(default)* | `deepseek-v4.1-flash` | Everyday chat; the largest budget |
+| `pro` | `deepseek-v4-pro` | An incident that doesn't add up, reviewing a compose file — its budget is small ($15/month) |
+| `fast` | `glm-5.3-flash` | Quick questions when `flash`'s 5-hour window is running low |
+
+Under `auxiliary:`, context compression and session titles run on `glm-5.3-flash`, and the curator
+(the self-improvement review that writes memories and skills) runs on `deepseek-v4-pro`. A task
+whose provider or key doesn't resolve falls back to OpenRouter and logs a warning in
+`~hermes/.hermes/logs/errors.log`. Check there after changing any of them.
+
 ### Fallback model
 
 When the primary fails (rate limit, outage), Hermes switches to the first entry of
@@ -322,9 +339,10 @@ When the primary fails (rate limit, outage), Hermes switches to the first entry 
 default is OpenRouter's free `nvidia/nemotron-3-ultra-550b-a55b:free`, which covers a spent Go
 usage window (5-hour, weekly or monthly) within OpenRouter's 50 free requests a day.
 
-The fallback must be a **different provider** than the primary: limits are per account
-(OpenRouter's `free-models-per-day`, Go's usage windows), so another model of the same provider
-fails too. Gemini's free tier (`provider: gemini`, `gemini-3.5-flash-lite`) also works, but its
+The fallback must be a **different provider** than the primary: an outage or a spent key takes
+down every model of that provider, and OpenRouter's `free-models-per-day` limit is per account.
+Go's usage windows are per model, so a spent window alone could be covered by another Go model
+(switch by hand with `/model fast`), but the fallback has to survive a Go outage too. Gemini's free tier (`provider: gemini`, `gemini-3.5-flash-lite`) also works, but its
 content **is used to improve Google's products**. Groq's free plan doesn't: its tokens-per-minute
 cap is smaller than a single Hermes request, which fails with `413 Request payload too large`.
 

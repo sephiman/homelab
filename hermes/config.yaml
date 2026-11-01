@@ -10,6 +10,39 @@ model:
   provider: opencode-go
   base_url: https://opencode.ai/zen/go/v1
 
+# `/model <alias>` in Telegram switches the current chat. Each Go model has its own usage budget,
+# so spreading work across them spares the default's. base_url pinned for the same reason as above.
+model_aliases:
+  flash:
+    model: deepseek-v4.1-flash
+    provider: opencode-go
+    base_url: https://opencode.ai/zen/go/v1
+  # Hard diagnoses only: its budget is $15/month.
+  pro:
+    model: deepseek-v4-pro
+    provider: opencode-go
+    base_url: https://opencode.ai/zen/go/v1
+  fast:
+    model: glm-5.3-flash
+    provider: opencode-go
+    base_url: https://opencode.ai/zen/go/v1
+
+# Background tasks default to the main model; these move off its budget. The curator runs the
+# self-improvement review that once saved wrong memories/skills, so it gets the stronger model.
+auxiliary:
+  compression:
+    provider: opencode-go
+    model: glm-5.3-flash
+    base_url: https://opencode.ai/zen/go/v1
+  title_generation:
+    provider: opencode-go
+    model: glm-5.3-flash
+    base_url: https://opencode.ai/zen/go/v1
+  curator:
+    provider: opencode-go
+    model: deepseek-v4-pro
+    base_url: https://opencode.ai/zen/go/v1
+
 timezone: Europe/Madrid
 
 terminal:
