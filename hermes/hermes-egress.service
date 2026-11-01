@@ -1,7 +1,7 @@
 [Unit]
 Description=Egress firewall for the hermes user
 Wants=network-pre.target
-Before=network-pre.target hermes-gateway.service
+Before=network-pre.target hermes-gateway.service hermes-dashboard.service
 
 [Service]
 Type=oneshot

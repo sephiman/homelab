@@ -69,12 +69,62 @@ provider_key_line() {
   printf '%s=%s\n' "$key_var" "$value"
 }
 
+# Same format as Hermes' basic dashboard login (plugins/dashboard_auth/basic: scrypt n=2^14 r=8 p=1,
+# 16-byte salt, 32-byte key), so only the hash reaches Hermes' .env. The password goes through the
+# environment, never a command line.
+dashboard_password_hash_line() {
+  local password
+  password="$(env_value HERMES_DASHBOARD_PASSWORD)"
+  if is_unset "$password"; then
+    return 0
+  fi
+  DASHBOARD_PASSWORD="$password" python3 -c '
+import base64, hashlib, os, secrets
+salt = secrets.token_bytes(16)
+key = hashlib.scrypt(os.environ["DASHBOARD_PASSWORD"].encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+b64 = lambda raw: base64.b64encode(raw).decode()
+print(f"HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH=scrypt$16384$8$1${b64(salt)}${b64(key)}")'
+}
+
 # Prints the .env Hermes gets: hermes/.env minus the DB password, with the generic keys renamed.
 hermes_env() {
   grep -v -e '^HERMES_DB_RO_PASSWORD=' -e '^LLM_API_KEY=' -e '^FALLBACK_API_KEY=' -e '^HA_TOKEN=' \
-    "$SCRIPT_DIR/.env" || true
+    -e '^HERMES_DASHBOARD_PASSWORD=' "$SCRIPT_DIR/.env" || true
   provider_key_line LLM_API_KEY model
   provider_key_line FALLBACK_API_KEY fallback_providers
+  dashboard_password_hash_line
+}
+
+# Nginx Proxy Manager is a container, so the dashboard listens on the all_dockers gateway address
+# (host loopback is out of its reach), and trusts that network's X-Forwarded-* headers.
+install_dashboard() {
+  local network gateway subnet
+  if is_unset "$(env_value HERMES_DASHBOARD_PASSWORD)"; then
+    echo "HERMES_DASHBOARD_PASSWORD not set: the web dashboard stays off"
+    systemctl disable --now hermes-dashboard.service 2>/dev/null || true
+    return 0
+  fi
+  ! is_unset "$(env_value HERMES_DASHBOARD_BASIC_AUTH_USERNAME)" ||
+    die "set HERMES_DASHBOARD_BASIC_AUTH_USERNAME in hermes/.env (or remove HERMES_DASHBOARD_PASSWORD)"
+  ! is_unset "$(env_value HERMES_DASHBOARD_PUBLIC_URL)" ||
+    die "set HERMES_DASHBOARD_PUBLIC_URL in hermes/.env: the https:// address you give it in Nginx Proxy Manager"
+  ! grep -q '^dashboard:' "$SCRIPT_DIR/config.yaml" ||
+    die "remove the top-level dashboard: block from config.yaml; this script writes it"
+  network="$(docker network inspect all_dockers \
+    --format '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{println}}{{end}}')" ||
+    die "Docker network all_dockers not found (root README, 'Shared network')"
+  read -r subnet gateway < <(grep -v ':' <<<"$network" | head -n 1) || true
+  [[ -n "$subnet" && -n "$gateway" ]] || die "all_dockers has no IPv4 subnet/gateway: $network"
+  printf 'HERMES_DASHBOARD_BIND=%s\n' "$gateway" >/etc/hermes/dashboard.env
+  chmod 0644 /etc/hermes/dashboard.env
+  cat >>/etc/hermes/config.yaml <<EOF
+
+# Added by install-host.sh: Nginx Proxy Manager reaches the dashboard from the all_dockers network.
+dashboard:
+  trusted_proxies:
+    - $subnet
+EOF
+  echo "Web dashboard: point the Nginx Proxy Manager proxy host at http://$gateway:9119"
 }
 
 # HA_TOKEN goes root-only to the wrapper, never to Hermes' .env: a Home Assistant token can also
@@ -211,6 +261,7 @@ install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-egress.nft" /etc/hermes/herm
 nft -c -f /etc/hermes/hermes-egress.nft
 install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-egress.service" /etc/systemd/system/hermes-egress.service
 install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-gateway.service" /etc/systemd/system/hermes-gateway.service
+install -o root -g root -m 0644 "$SCRIPT_DIR/hermes-dashboard.service" /etc/systemd/system/hermes-dashboard.service
 systemctl daemon-reload
 systemctl enable hermes-egress.service
 systemctl restart hermes-egress.service
@@ -245,6 +296,7 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   printf '%s\n' "$env_content" | install_secret "$HERMES_HOME_DIR/.hermes/.env"
   printf '127.0.0.1:5432:*:hermes_ro:%s\n' "$db_password" | install_secret "$HERMES_HOME_DIR/.pgpass"
   install_ha_token
+  install_dashboard
 else
   echo "hermes/.env not found: copy .env.example to .env, fill it in and run this script again."
 fi

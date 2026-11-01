@@ -1,0 +1,27 @@
+[Unit]
+Description=Hermes Agent web dashboard (behind Nginx Proxy Manager)
+Wants=network-online.target
+After=network-online.target docker.service hermes-egress.service
+# Fail closed: no egress firewall, no dashboard (its Chat tab runs the full agent).
+Requires=hermes-egress.service
+
+[Service]
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes/workspace
+Environment=HOME=/home/hermes
+Environment=HERMES_HOME=/home/hermes/.hermes
+Environment=HERMES_WRITE_SAFE_ROOT=/home/hermes/.hermes:/home/hermes/workspace
+Environment=PATH=/home/hermes/.local/bin:/usr/local/bin:/usr/bin:/bin
+# HERMES_DASHBOARD_BIND: the all_dockers gateway address, written by install-host.sh. A non-loopback
+# bind makes Hermes refuse to start without a login configured.
+EnvironmentFile=/etc/hermes/dashboard.env
+ExecStart=/home/hermes/.local/bin/hermes dashboard --host ${HERMES_DASHBOARD_BIND} --port 9119 --no-open
+# Also covers the bridge address not existing yet when Docker starts late.
+Restart=on-failure
+RestartSec=10
+# 78 is Hermes refusing on purpose (e.g. no login configured); retrying won't fix it.
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=multi-user.target

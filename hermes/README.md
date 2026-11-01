@@ -273,6 +273,60 @@ nothing. All jobs follow `timezone: Europe/Madrid` in `config.yaml`, whatever th
 Change the summary's language or contents by editing its prompt: `hermes cron edit <job_id>
 --prompt '…'`. Pause one with `hermes cron pause <job_id>`.
 
+## Web dashboard
+
+Hermes' own [web dashboard](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard)
+lets you browse, search, rename, export and delete sessions, chat with the agent, and see its logs,
+scheduled jobs, skills and memory. It runs as `hermes-dashboard.service` (user `hermes`) behind
+Nginx Proxy Manager, **LAN only**, with its username/password login.
+
+1. In `hermes/.env`, set the address you'll give it, a username and a password:
+
+   ```bash
+   HERMES_DASHBOARD_PUBLIC_URL=https://hermes.example.com
+   HERMES_DASHBOARD_BASIC_AUTH_USERNAME=juanjo
+   HERMES_DASHBOARD_PASSWORD=<a long password>
+   ```
+
+2. Install and start it:
+
+   ```bash
+   sudo ./install-host.sh     # prints: point the Nginx Proxy Manager proxy host at http://172.x.0.1:9119
+   sudo systemctl enable --now hermes-dashboard
+   journalctl -u hermes-dashboard -f
+   ```
+
+3. In Nginx Proxy Manager (`:81`):
+   - **Access Lists → Add**: no authorization users; under **Access**, *allow* your LAN
+     (e.g. `192.168.1.0/24`) and *deny* `all`.
+   - **Proxy Hosts → Add**: the domain from `HERMES_DASHBOARD_PUBLIC_URL`, scheme `http`,
+     forward to the address the script printed, port `9119`, **Websockets Support** and **Block
+     Common Exploits** on, the access list above; on the SSL tab, a certificate and **Force SSL**.
+
+How it fits the rest of the setup:
+
+- **Where it listens.** Nginx Proxy Manager is a container and can't reach the host's loopback, so
+  the dashboard listens on the `all_dockers` gateway address, which isn't reachable from the LAN.
+  `install-host.sh` writes it to `/etc/hermes/dashboard.env` and adds that network as
+  `dashboard.trusted_proxies` to the installed `/etc/hermes/config.yaml`. Don't add a
+  `dashboard:` block to `config.yaml` yourself; the script stops if you do.
+- **Login.** On any non-loopback address Hermes refuses to start without a login. Only a scrypt
+  hash of the password reaches Hermes' `.env`. Without a signing secret, logins reset whenever the
+  dashboard restarts. The username/password login is meant for trusted networks only, so the
+  access list is what keeps it off the internet. Exposing it beyond the LAN needs OAuth/OIDC
+  instead.
+- **The agent can't reach it.** The egress firewall drops the `hermes` user's traffic to Docker
+  networks and to loopback below the ephemeral range, so the agent (and its browser tool) can't
+  open the dashboard. The `hermes` user can read the password hash in its own `.env`.
+- **The Chat tab is the full agent**, with the same tools and manual approvals as Telegram; you
+  approve in the browser.
+- **Settings stay in the repo.** The Config page writes `~hermes/.hermes/config.yaml`, which every
+  key in this folder's `config.yaml` overrides. The API Keys page writes Hermes' `.env`, which
+  `install-host.sh` rewrites from `hermes/.env` on every run. Change both here.
+- After changing the password, run `sudo ./install-host.sh` and restart **both**
+  `hermes-gateway` and `hermes-dashboard`. Remove `HERMES_DASHBOARD_PASSWORD` to turn the
+  dashboard off: the script then disables the service.
+
 ## Choosing a model
 
 Whatever model you use receives your logs, container names and DB stats, so its data terms matter
