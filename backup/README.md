@@ -6,7 +6,7 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 
 | Source                | Included                          |
 |-----------------------|-----------------------------------|
-| `homeassistant`       | full folder                       |
+| `homeassistant`       | full folder; the recorder DB (`home-assistant_v2.db`) as a separate consistent SQLite snapshot |
 | `qbittorrent`         | full folder                       |
 | `rustdesk`            | full folder                       |
 | `jellyfin/config`     | **config only** (no media/cache)  |
@@ -14,7 +14,9 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 | `vaultwarden/data`    | attachments, sends, `rsa_key.pem` (no `icon_cache`); the vault itself is in PostgreSQL |
 | PostgreSQL            | `pg_dumpall` — all databases + roles |
 
-Each run produces a dated folder (`YYYY-MM-DD_HHMMSS/`) with one `.tar.gz` per source, a gzipped SQL dump, and a `SHA256SUMS` file for integrity checks.
+Each run produces a dated folder (`YYYY-MM-DD_HHMMSS/`) with one `.tar.gz` per source, the Home Assistant database snapshot (`homeassistant-db.sqlite.gz`), a gzipped SQL dump, and a `SHA256SUMS` file for integrity checks.
+
+Live apps keep writing while they are archived. GNU tar then reports `file changed as we read it` (exit 1); the run logs a warning and keeps the archive. Any other tar error fails the run. Home Assistant's recorder DB is the exception: it is excluded from the tarball and copied with `VACUUM INTO` instead, because a tarred live SQLite DB + WAL may not open on restore.
 
 Sources are mounted **read-only**; PostgreSQL is dumped over the `all_dockers` network against `postgresdb`, so the `pgdata18` volume is never touched.
 
@@ -154,6 +156,12 @@ Restore a folder (stop the relevant service first):
 
 ```bash
 tar xzf homeassistant.tar.gz -C ${HOME}/homeassistant
+```
+
+Home Assistant's database is not in the tarball; put the snapshot back next to its config:
+
+```bash
+gunzip -c homeassistant-db.sqlite.gz > ${HOME}/homeassistant/config/home-assistant_v2.db
 ```
 
 Restore PostgreSQL (this recreates all databases and roles):

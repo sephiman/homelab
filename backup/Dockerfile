@@ -9,6 +9,7 @@ RUN apk add --no-cache \
       coreutils \
       findutils \
       rclone \
+      sqlite \
       postgresql18-client
 
 COPY backup.sh /usr/local/bin/backup.sh

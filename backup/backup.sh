@@ -16,6 +16,19 @@ METRICS_FILE=/metrics/backup.prom
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# tar exit 1 = "file changed as we read it"; the archive is still usable, so only >=2 fails the run.
+tarball() {
+  local dest=$1; shift
+  local rc=0
+  tar czf "${dest}" "$@" || rc=$?
+  if [ "${rc}" -gt 1 ]; then
+    log "tar failed (exit ${rc}): $(basename "${dest}")"
+    return "${rc}"
+  fi
+  [ "${rc}" -eq 1 ] && log "warning: files changed while archiving $(basename "${dest}") (archive kept)"
+  return 0
+}
+
 previous_metric() {
   sed -n "s/^$1 //p" "${METRICS_FILE}" 2>/dev/null || true
 }
@@ -30,6 +43,7 @@ write_metrics() {
     last_success="${now}"
     size_bytes="$(du -sb "${DEST}" | cut -f1)"
   else
+    log "=== Backup FAILED (exit ${status}): ${TIMESTAMP} ==="
     success=0
     last_success="$(previous_metric homelab_backup_last_success_timestamp_seconds)"
     size_bytes="$(previous_metric homelab_backup_size_bytes)"
@@ -56,29 +70,35 @@ log "=== Backup started: ${TIMESTAMP} ==="
 mkdir -p "${DEST}"
 
 # 1. Folder archives -------------------------------------------------------
+# The live recorder DB + WAL can't be tarred consistently, so it is snapshotted separately.
 log "Archiving homeassistant..."
-tar czf "${DEST}/homeassistant.tar.gz" -C /sources/homeassistant .
+tarball "${DEST}/homeassistant.tar.gz" --exclude='./config/home-assistant_v2.db*' -C /sources/homeassistant .
+
+# VACUUM INTO reads in one transaction; the CLI's .backup restarts on every recorder commit.
+log "Snapshotting Home Assistant database..."
+sqlite3 /sources/homeassistant/config/home-assistant_v2.db "VACUUM INTO '${DEST}/homeassistant-db.sqlite'"
+gzip "${DEST}/homeassistant-db.sqlite"
 
 log "Archiving qbittorrent..."
-tar czf "${DEST}/qbittorrent.tar.gz" -C /sources/qbittorrent .
+tarball "${DEST}/qbittorrent.tar.gz" -C /sources/qbittorrent .
 
 log "Archiving rustdesk..."
-tar czf "${DEST}/rustdesk.tar.gz" -C /sources/rustdesk .
+tarball "${DEST}/rustdesk.tar.gz" -C /sources/rustdesk .
 
 # Jellyfin: only the config folder, not the media library or cache.
 log "Archiving jellyfin config..."
-tar czf "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
+tarball "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
 
 # Media apps: config + DB (+ the *arrs' own Backups/ zips); MediaCover is re-downloadable artwork.
 for app in prowlarr sonarr radarr bazarr seerr cleanuparr maintainerr searcharr; do
   log "Archiving ${app} config..."
-  tar czf "${DEST}/${app}.tar.gz" --exclude=./MediaCover --exclude=./logs -C "/sources/${app}" .
+  tarball "${DEST}/${app}.tar.gz" --exclude=./MediaCover --exclude=./logs -C "/sources/${app}" .
 done
 
 # Vaultwarden: attachments, sends and rsa_key.pem (the vault itself is in PostgreSQL).
 # icon_cache is just downloaded favicons.
 log "Archiving vaultwarden data..."
-tar czf "${DEST}/vaultwarden.tar.gz" --exclude=./icon_cache -C /sources/vaultwarden .
+tarball "${DEST}/vaultwarden.tar.gz" --exclude=./icon_cache -C /sources/vaultwarden .
 
 # 2. PostgreSQL dump (all databases + roles) -------------------------------
 # Build --exclude-database flags from PG_EXCLUDE_DATABASES (comma/space list).
@@ -100,7 +120,7 @@ PGPASSWORD="${POSTGRES_PASSWORD}" pg_dumpall \
   | gzip > "${DEST}/postgres-all.sql.gz"
 
 # Checksums for integrity verification on restore.
-( cd "${DEST}" && sha256sum ./*.tar.gz ./*.sql.gz > SHA256SUMS )
+( cd "${DEST}" && sha256sum ./*.tar.gz ./*.sqlite.gz ./*.sql.gz > SHA256SUMS )
 
 log "Local backup ready: $(du -sh "${DEST}" | cut -f1)"
 
