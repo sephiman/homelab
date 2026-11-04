@@ -2,13 +2,24 @@ groups:
   - name: zigbee
     interval: 1m
     rules:
+      - alert: ZigbeeNetworkSilent
+        # The coordinator firmware can hang while the container, MQTT and HA stay up: the only trace is
+        # z2m no longer publishing device messages. Counts "MQTT publish" lines only, so error spam
+        # during the outage doesn't keep it above the threshold; `or vector(0)` covers no lines at all.
+        expr: (sum(count_over_time({container="zigbee2mqtt"} |= "MQTT publish" != "zigbee2mqtt/bridge/" [15m])) or vector(0)) < 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zigbee network went silent"
+          description: "zigbee2mqtt published fewer than 50 device messages in 15 minutes (normally several hundred): the coordinator has likely hung. Restart the home-automation project; if it keeps happening, check the USB adapter."
+
       - alert: ZigbeeCoordinatorNotResponding
-        # The coordinator firmware hangs while the container, MQTT and HA stay up; only failed
-        # transmit requests show it, so this fires once something tries to send a command.
-        expr: sum(count_over_time({container="zigbee2mqtt"} |= "SRSP - AF" [10m])) > 5
-        for: 5m
+        # z2m only logs SRSP failures when a command is sent; one alone happens on start/stop.
+        expr: sum(count_over_time({container="zigbee2mqtt"} |= "SRSP - AF" [10m])) >= 2
+        for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Zigbee coordinator stopped accepting transmit requests"
-          description: "zigbee2mqtt logged more than 5 'SRSP - AF' failures in 10 minutes: commands are not leaving the coordinator and devices stop reporting. Restart the home-automation project; if it keeps happening, check the USB adapter."
+          description: "zigbee2mqtt logged {{ $value }} 'SRSP - AF' failures in 10 minutes: commands are not leaving the coordinator. Restart the home-automation project; if it keeps happening, check the USB adapter."
