@@ -155,7 +155,8 @@ not in the output.'
 
 readonly HOLDINGS_REPORT_PROMPT='Write the daily portfolio report of the Shared Ledger household from the Script Output above,
 in euros, in 4-5 lines: crypto, ETF+stocks and the total, each with today'"'"'s value and its change
-versus yesterday with sign and percentage. If the output has warnings (stale or missing prices),
+versus yesterday with sign and percentage; for ETF+stocks name the two closing dates it compares.
+If the output has warnings (stale or missing prices),
 say so on one trailing line. If the output says the query failed, report the error. Never invent
 figures that are not in the output.'
 

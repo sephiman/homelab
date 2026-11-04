@@ -3,6 +3,8 @@
 # ETF/stock holdings at today and at yesterday (net quantity of BUY − SELL lots traded up to that day ×
 # latest price up to that day × FX into the household currency, as the app does). Snapshots aren't used:
 # Casa takes them monthly. Nothing held on either day prints nothing, and Hermes then skips the model.
+# ETF/stock prices are taken a day earlier: the morning run has no close for today yet, so both days
+# would land on the same close; this way each session's move is reported exactly once.
 set -euo pipefail
 
 readonly HOUSEHOLD=casa
@@ -12,7 +14,7 @@ readonly CRYPTO_STALE_HOURS=3
 readonly EQUITY_STALE_DAYS=4
 
 # Rows: `household-missing`, `held <count>`, `block <crypto|etf-stocks|total> <today> <yesterday>`,
-# `unpriced <symbol>` (left out of the totals), `stale <symbol> <price date or time>`.
+# `closes <today's ETF/stock close date> <yesterday's>`, `unpriced <symbol>` (left out of the totals), `stale <symbol> <price date or time>`.
 holdings_valuation() {
   psql "service=homelab dbname=sharedledger" -X -q -A -t -F $'\t' -v ON_ERROR_STOP=1 \
     -v household="$HOUSEHOLD" -v timezone="$TIMEZONE" -v today="$(TZ="$TIMEZONE" date +%F)" \
@@ -25,7 +27,8 @@ days(label, day) AS (
     VALUES ('today', :'today'::date), ('yesterday', :'yesterday'::date)
 ),
 positions AS (
-    SELECT d.label, d.day, h.asset_class, h.symbol, h.native_currency, h.provider, h.provider_symbol,
+    SELECT d.label, d.day, d.day - CASE WHEN h.asset_class = 'crypto' THEN 0 ELSE 1 END AS price_day,
+           h.asset_class, h.symbol, h.native_currency, h.provider, h.provider_symbol,
            sum(CASE l.type WHEN 'BUY' THEN l.quantity ELSE -l.quantity END) AS quantity
     FROM days d
     CROSS JOIN household hh
@@ -46,7 +49,7 @@ valued AS (
         FROM price_history ph
         WHERE ph.provider = p.provider AND ph.provider_symbol = p.provider_symbol
           AND ph.currency = CASE WHEN p.asset_class = 'crypto' THEN hh.currency ELSE p.native_currency END
-          AND ph.price_date <= p.day
+          AND ph.price_date <= p.price_day
         ORDER BY ph.price_date DESC, ph.as_of DESC
         LIMIT 1
     ) pr ON true
@@ -54,7 +57,7 @@ valued AS (
     LEFT JOIN LATERAL (
         SELECT r.rate
         FROM fx_rates r
-        WHERE r.base_currency = pr.currency AND r.quote_currency = hh.currency AND r.rate_date <= p.day
+        WHERE r.base_currency = pr.currency AND r.quote_currency = hh.currency AND r.rate_date <= p.price_day
         ORDER BY r.rate_date DESC
         LIMIT 1
     ) fx ON true
@@ -72,6 +75,10 @@ SELECT 'held', count(*)::text, NULL, NULL FROM positions
 UNION ALL
 SELECT 'block', block, round(coalesce(today, 0), 2)::text, round(coalesce(yesterday, 0), 2)::text FROM blocks
 UNION ALL
+SELECT 'closes', max(price_date) FILTER (WHERE label = 'today')::text,
+       max(price_date) FILTER (WHERE label = 'yesterday')::text, NULL
+FROM valued WHERE asset_class <> 'crypto'
+UNION ALL
 SELECT 'unpriced', symbol, NULL, NULL FROM valued WHERE label = 'today' AND value IS NULL
 UNION ALL
 SELECT 'stale', symbol, CASE WHEN asset_class = 'crypto' THEN to_char(as_of AT TIME ZONE :'timezone', 'YYYY-MM-DD HH24:MI')
@@ -88,6 +95,7 @@ format_report() {
     $1 == "household-missing" { missing = 1 }
     $1 == "held" { held = $2 }
     $1 == "block" { today[$2] = $3; yesterday[$2] = $4 }
+    $1 == "closes" && $2 != "" { closes = sprintf("\tcloses %s vs %s", $2, $3) }
     $1 == "unpriced" { warnings = warnings sprintf("%s has no price or FX rate: left out of the totals\n", $2) }
     $1 == "stale" { warnings = warnings sprintf("%s price is stale (from %s)\n", $2, $3) }
     END {
@@ -99,7 +107,7 @@ format_report() {
         b = blocks[i]
         change = today[b] - yesterday[b]
         pct = (yesterday[b] != 0) ? sprintf(" (%+.2f%%)", 100 * change / yesterday[b]) : ""
-        printf "%s\ttoday %.2f\tyesterday %.2f\tchange %+.2f%s\n", b, today[b], yesterday[b], change, pct
+        printf "%s\ttoday %.2f\tyesterday %.2f\tchange %+.2f%s%s\n", b, today[b], yesterday[b], change, pct, (b == "etf-stocks") ? closes : ""
       }
       if (warnings != "") printf "=== warnings\n%s", warnings
     }

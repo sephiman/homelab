@@ -266,6 +266,9 @@ The holdings report (08:10, after the hourly crypto price refresh) reads the Sha
 `casa` (`HOUSEHOLD` in the script) through the read-only `hermes_ro` role and values its active
 crypto and ETF/stock holdings today and yesterday the way the app does: net quantity of BUY minus
 SELL lots traded up to that day × latest price up to that day × FX into the household currency.
+ETF/stock prices are taken one day earlier (yesterday's close vs the day before's, dates shown in
+the output): at 08:10 there is no close for today yet, so each session's move shows up exactly once,
+the morning after (Tuesday to Saturday), and Sunday and Monday show no ETF/stock change.
 Snapshots aren't used (Casa takes them monthly). It flags crypto prices older than 3 hours, ETF/stock
 prices older than 4 days and holdings with no price or FX rate; while nothing is held it sends
 nothing. All jobs follow `timezone: Europe/Madrid` in `config.yaml`, whatever the host clock says.
