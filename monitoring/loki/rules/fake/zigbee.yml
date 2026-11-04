@@ -7,7 +7,7 @@ groups:
         # z2m no longer publishing device messages. Counts "MQTT publish" lines only, so error spam
         # during the outage doesn't keep it above the threshold; `or vector(0)` covers no lines at all.
         expr: (sum(count_over_time({container="zigbee2mqtt"} |= "MQTT publish" != "zigbee2mqtt/bridge/" [15m])) or vector(0)) < 50
-        for: 10m
+        for: 5m
         labels:
           severity: warning
         annotations:
