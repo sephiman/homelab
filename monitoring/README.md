@@ -157,6 +157,13 @@ the metrics the backup stack writes for node-exporter's textfile collector
 (`${HOME}/backup/metrics`, see [backup/README.md](../backup/README.md#monitoring)).
 To add one, drop it in a file there and `docker compose restart prometheus`.
 
+Log-based rules are evaluated by Loki's ruler, which pushes to the same Alertmanager:
+`loki/rules/fake/zigbee.yml` has `ZigbeeCoordinatorNotResponding` (zigbee2mqtt logging `SRSP - AF`
+transmit failures — the coordinator hung while the container, MQTT and HA all stay up). Loki keeps
+rules per tenant and, with auth off, the tenant is `fake`: a file outside `loki/rules/fake/` is
+silently ignored. To add one, drop it there and `docker compose restart loki`; check it loaded with
+`curl -s localhost:3100/loki/api/v1/rules`.
+
 ## Persistence
 
 Docker-managed named volumes (survive `docker compose down`):

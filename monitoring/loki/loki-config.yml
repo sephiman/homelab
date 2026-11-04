@@ -11,7 +11,6 @@ common:
   storage:
     filesystem:
       chunks_directory: /loki/chunks
-      rules_directory: /loki/rules
   replication_factor: 1
   ring:
     kvstore:
@@ -38,8 +37,16 @@ compactor:
   delete_request_store: filesystem
   retention_enabled: true
 
+# Log-based alert rules, read from the repo's loki/rules. Loki keeps them per tenant: with auth off
+# that is `fake`, so they live in loki/rules/fake/ — a file anywhere else is silently ignored.
 ruler:
-  alertmanager_url: ""
+  alertmanager_url: http://alertmanager:9093
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: /loki/rules-temp
+  enable_api: true
 
 analytics:
   reporting_enabled: false

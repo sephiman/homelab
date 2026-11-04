@@ -1,0 +1,14 @@
+groups:
+  - name: zigbee
+    interval: 1m
+    rules:
+      - alert: ZigbeeCoordinatorNotResponding
+        # The coordinator firmware hangs while the container, MQTT and HA stay up; only failed
+        # transmit requests show it, so this fires once something tries to send a command.
+        expr: sum(count_over_time({container="zigbee2mqtt"} |= "SRSP - AF" [10m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zigbee coordinator stopped accepting transmit requests"
+          description: "zigbee2mqtt logged more than 5 'SRSP - AF' failures in 10 minutes: commands are not leaving the coordinator and devices stop reporting. Restart the home-automation project; if it keeps happening, check the USB adapter."
