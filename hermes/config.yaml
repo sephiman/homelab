@@ -83,8 +83,13 @@ providers:
     api: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY
 
-# Used when the primary fails (e.g. a Go usage window is spent). Its key goes in FALLBACK_API_KEY.
+# Tried in order when the primary fails. Haiku first: Go usage windows are per model, so it covers a
+# spent DeepSeek window with the same Go key. OpenRouter covers a Go outage; its key goes in
+# FALLBACK_API_KEY. Hermes sends claude-* over Go's Anthropic endpoint, deriving it from this base_url.
 fallback_providers:
+  - provider: opencode-go
+    model: claude-haiku-5-5
+    base_url: https://opencode.ai/zen/go/v1
   - provider: openrouter
     model: nvidia/nemotron-3-ultra-550b-a55b:free
 

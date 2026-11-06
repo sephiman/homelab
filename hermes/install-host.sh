@@ -37,12 +37,20 @@ install_secret() {
   rm -f "$tmp"
 }
 
-# First `provider:` inside a top-level section of hermes/config.yaml (pinned as the managed config):
-# `model` is the primary, `fallback_providers` the first fallback.
-configured_provider() {
+# Every `provider:` inside a top-level section of hermes/config.yaml (pinned as the managed config), in order.
+configured_providers() {
   local section="$1"
   sed -n "/^$section:/,/^[^ #]/s/^ *-\{0,1\} *provider: *[\"']\{0,1\}\([a-z0-9:-]*\).*/\1/p" \
-    "$SCRIPT_DIR/config.yaml" | head -n 1
+    "$SCRIPT_DIR/config.yaml"
+}
+
+# The provider whose key a generic variable holds: the primary's for `model`; for `fallback_providers`
+# the first one not sharing the primary's provider, since LLM_API_KEY already covers that one.
+keyed_provider() {
+  local section="$1" primary
+  primary="$(configured_providers model | head -n 1)"
+  [[ "$section" == model ]] && { echo "$primary"; return 0; }
+  configured_providers "$section" | grep -vxF -- "$primary" | head -n 1
 }
 
 env_value() {
@@ -61,7 +69,7 @@ provider_key_line() {
     echo "$generic_var not set: no key for the $section provider" >&2
     return 0
   fi
-  provider="$(configured_provider "$section")"
+  provider="$(keyed_provider "$section")"
   [[ -n "$provider" ]] || die "$generic_var is set but config.yaml has no $section provider"
   key_var="${PROVIDER_KEY_VARS[$provider]:-}"
   [[ -n "$key_var" ]] || die "provider '$provider' has no $generic_var mapping: put its own key variable in hermes/.env (see the Hermes provider docs)"
