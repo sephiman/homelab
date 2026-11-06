@@ -13,11 +13,11 @@ Environment=HOME=/home/hermes
 Environment=HERMES_HOME=/home/hermes/.hermes
 Environment=HERMES_WRITE_SAFE_ROOT=/home/hermes/.hermes:/home/hermes/workspace
 Environment=PATH=/home/hermes/.local/bin:/usr/local/bin:/usr/bin:/bin
-# HERMES_DASHBOARD_BIND: the all_dockers gateway address, written by install-host.sh. A non-loopback
-# bind makes Hermes refuse to start without a login configured.
+# HERMES_DASHBOARD_BIND: the host's LAN address, written by install-host.sh. A non-loopback bind makes
+# Hermes refuse to start without a login configured.
 EnvironmentFile=/etc/hermes/dashboard.env
 ExecStart=/home/hermes/.local/bin/hermes dashboard --host ${HERMES_DASHBOARD_BIND} --port 9119 --no-open
-# Also covers the bridge address not existing yet when Docker starts late.
+# Also covers the LAN address not being assigned yet at boot.
 Restart=on-failure
 RestartSec=10
 # 78 is Hermes refusing on purpose (e.g. no login configured); retrying won't fix it.

@@ -281,7 +281,8 @@ Change the summary's language or contents by editing its prompt: `hermes cron ed
 Hermes' own [web dashboard](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard)
 lets you browse, search, rename, export and delete sessions, chat with the agent, and see its logs,
 scheduled jobs, skills and memory. It runs as `hermes-dashboard.service` (user `hermes`) behind
-Nginx Proxy Manager, **LAN only**, with its username/password login.
+Nginx Proxy Manager and directly at `http://<host LAN IP>:9119`, **LAN only**, with its
+username/password login.
 
 1. In `hermes/.env`, set the address you'll give it, a username and a password:
 
@@ -294,7 +295,7 @@ Nginx Proxy Manager, **LAN only**, with its username/password login.
 2. Install and start it:
 
    ```bash
-   sudo ./install-host.sh     # prints: point the Nginx Proxy Manager proxy host at http://172.x.0.1:9119
+   sudo ./install-host.sh     # prints the address: http://<host LAN IP>:9119
    sudo systemctl enable --now hermes-dashboard
    journalctl -u hermes-dashboard -f
    ```
@@ -308,10 +309,14 @@ Nginx Proxy Manager, **LAN only**, with its username/password login.
 
 How it fits the rest of the setup:
 
-- **Where it listens.** Nginx Proxy Manager is a container and can't reach the host's loopback, so
-  the dashboard listens on the `all_dockers` gateway address, which isn't reachable from the LAN.
-  `install-host.sh` writes it to `/etc/hermes/dashboard.env` and adds that network as
-  `dashboard.trusted_proxies` to the installed `/etc/hermes/config.yaml`. Don't add a
+- **Where it listens.** On the host's LAN address (the source address of its default route), so
+  LAN browsers can open it by IP and Nginx Proxy Manager, a container that can't reach the host's
+  loopback, proxies to the same address. Hermes accepts only the bound address or the
+  `HERMES_DASHBOARD_PUBLIC_URL` host in the `Host` header (DNS-rebinding guard), so `localhost` or
+  another name won't work. The direct address is plain HTTP and skips the Nginx Proxy Manager
+  access list: never forward port 9119 on the router, and give the host a DHCP reservation.
+  `install-host.sh` writes the address to `/etc/hermes/dashboard.env` and adds the `all_dockers`
+  network as `dashboard.trusted_proxies` to the installed `/etc/hermes/config.yaml`. Don't add a
   `dashboard:` block to `config.yaml` yourself; the script stops if you do.
 - **Login.** On any non-loopback address Hermes refuses to start without a login. Only a scrypt
   hash of the password reaches Hermes' `.env`. Without a signing secret, logins reset whenever the
@@ -319,7 +324,8 @@ How it fits the rest of the setup:
   access list is what keeps it off the internet. Exposing it beyond the LAN needs OAuth/OIDC
   instead.
 - **The agent can't reach it.** The egress firewall drops the `hermes` user's traffic to Docker
-  networks and to loopback below the ephemeral range, so the agent (and its browser tool) can't
+  networks, the LAN and loopback below the ephemeral range (the host's own LAN address goes out
+  through loopback), so the agent (and its browser tool) can't
   open the dashboard. The `hermes` user can read the password hash in its own `.env`.
 - **The Chat tab is the full agent**, with the same tools and manual approvals as Telegram; you
   approve in the browser.

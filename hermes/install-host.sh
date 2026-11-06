@@ -95,10 +95,12 @@ hermes_env() {
   dashboard_password_hash_line
 }
 
-# Nginx Proxy Manager is a container, so the dashboard listens on the all_dockers gateway address
-# (host loopback is out of its reach), and trusts that network's X-Forwarded-* headers.
+# The dashboard listens on the host's LAN address: browsers on the LAN open it by IP, and Nginx Proxy
+# Manager (a container, so host loopback is out of its reach) proxies to the same address. Hermes accepts
+# only the bound address or the public URL as Host, so this is the one bind that serves both.
+# It trusts all_dockers' X-Forwarded-* headers, the network Nginx Proxy Manager connects from.
 install_dashboard() {
-  local network gateway subnet
+  local network subnet lan_ip
   if is_unset "$(env_value HERMES_DASHBOARD_PASSWORD)"; then
     echo "HERMES_DASHBOARD_PASSWORD not set: the web dashboard stays off"
     systemctl disable --now hermes-dashboard.service 2>/dev/null || true
@@ -111,11 +113,13 @@ install_dashboard() {
   ! grep -q '^dashboard:' "$SCRIPT_DIR/config.yaml" ||
     die "remove the top-level dashboard: block from config.yaml; this script writes it"
   network="$(docker network inspect all_dockers \
-    --format '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{println}}{{end}}')" ||
+    --format '{{range .IPAM.Config}}{{.Subnet}}{{println}}{{end}}')" ||
     die "Docker network all_dockers not found (root README, 'Shared network')"
-  read -r subnet gateway < <(grep -v ':' <<<"$network" | head -n 1) || true
-  [[ -n "$subnet" && -n "$gateway" ]] || die "all_dockers has no IPv4 subnet/gateway: $network"
-  printf 'HERMES_DASHBOARD_BIND=%s\n' "$gateway" >/etc/hermes/dashboard.env
+  subnet="$(grep -v ':' <<<"$network" | head -n 1)" || true
+  [[ -n "$subnet" ]] || die "all_dockers has no IPv4 subnet: $network"
+  lan_ip="$(ip -4 route get 1.1.1.1 | grep -oP '\bsrc \K[0-9.]+')" ||
+    die "no IPv4 default route: can't tell the host's LAN address"
+  printf 'HERMES_DASHBOARD_BIND=%s\n' "$lan_ip" >/etc/hermes/dashboard.env
   chmod 0644 /etc/hermes/dashboard.env
   cat >>/etc/hermes/config.yaml <<EOF
 
@@ -124,7 +128,7 @@ dashboard:
   trusted_proxies:
     - $subnet
 EOF
-  echo "Web dashboard: point the Nginx Proxy Manager proxy host at http://$gateway:9119"
+  echo "Web dashboard: http://$lan_ip:9119 on the LAN; point the Nginx Proxy Manager proxy host there too"
 }
 
 # HA_TOKEN goes root-only to the wrapper, never to Hermes' .env: a Home Assistant token can also
