@@ -84,9 +84,15 @@ Create a client of your own, following [rclone's guide](https://rclone.org/drive
 An existing remote can be switched to it without recreating it:
 
 ```bash
-docker compose run --rm backup rclone config update gdrive client_id <ID> client_secret <SECRET>
-docker compose run --rm backup rclone config reconnect gdrive:
+# --non-interactive saves the change without starting a browser login that has no browser to open
+docker compose run --rm backup rclone config update gdrive client_id <ID> client_secret <SECRET> --non-interactive
+docker compose run --rm -it backup rclone config reconnect gdrive:   # answer n, run `rclone authorize` on a PC
+docker compose run --rm backup rclone config redacted gdrive         # check it; unlike `show`, hides secrets
 ```
+
+With scope `drive.file`, rclone only sees files created by *this* client. After switching clients
+the old `homelab-backups` folder is invisible to it: the next upload starts a new folder of the
+same name, and the old one is never pruned. Delete it by hand in Drive once the new one has a backup.
 
 ### Create the remote (interactive, once)
 
