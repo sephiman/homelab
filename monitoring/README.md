@@ -152,7 +152,7 @@ Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertna
 Baseline rules in `prometheus/rules/home-automation.yml`:
 `HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
 `prometheus/rules/security.yml` adds `ImageScansStale`, from
-Dockhand's image scans (vulnerability counts are not alerted on — check Dockhand → Images). `prometheus/rules/backup.yml` has `BackupFailed` and `BackupStale`, from
+Dockhand's image scans (vulnerability counts are not alerted on — check Dockhand → Images). `prometheus/rules/backup.yml` has `BackupFailed`, `BackupStale` and `BackupOffsiteFailing`, from
 the metrics the backup stack writes for node-exporter's textfile collector
 (`${HOME}/backup/metrics`, see [backup/README.md](../backup/README.md#monitoring)).
 To add one, drop it in a file there and `docker compose restart prometheus`.

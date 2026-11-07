@@ -23,8 +23,18 @@ Sources are mounted **read-only**; PostgreSQL is dumped over the `all_dockers` n
 ## Schedule & retention
 
 - Runs daily at **03:05** (`BACKUP_CRON`).
-- **Local:** keeps the most recent backup only (`LOCAL_KEEP=1`) under `${HOME}/backup/archives`.
-- **Google Drive:** keeps copies for **7 days** (`REMOTE_RETENTION_DAYS`), older ones are deleted automatically.
+- Each source is its own step: one that fails (PostgreSQL down, a `tar` error) is logged and
+  skipped, and the rest is still backed up and uploaded. The run then counts as failed.
+- Before starting, it checks that the disk has room for the last backup's size plus 2 GB.
+- **Upload retries:** a backup folder holds a `.pending-upload` marker until its Google Drive copy
+  is uploaded and verified (`rclone check`). `upload.sh` runs right after the backup and then
+  hourly (`UPLOAD_CRON`, `:35`), and only sends files Drive doesn't have yet. So a failed or
+  interrupted upload is retried within the hour, not the next night. Each attempt is capped at
+  `UPLOAD_TIMEOUT` (3h).
+- **Local:** keeps the most recent uploaded backup only (`LOCAL_KEEP=1`) under `${HOME}/backup/archives`.
+  Backups still waiting for upload are never pruned.
+- **Google Drive:** keeps copies for **7 days** (`REMOTE_RETENTION_DAYS`); older ones are deleted
+  automatically, but only after an upload run in which every pending backup made it up.
 
 ## Prerequisites
 
@@ -48,6 +58,7 @@ cp .env.example .env
 - `PG_EXCLUDE_DATABASES` — databases to skip entirely (schema + data), comma/space separated. E.g. `satoshi_scanner`. Empty = dump everything.
 - `RCLONE_REMOTE`, `RCLONE_PATH` — rclone remote name and destination folder on the Drive.
 - `BACKUP_CRON` — cron schedule.
+- `UPLOAD_CRON`, `UPLOAD_TIMEOUT` — retry schedule for uploads that didn't finish, and the cap per attempt.
 - `LOCAL_KEEP`, `REMOTE_RETENTION_DAYS` — retention.
 - `RUN_ON_START` — run a backup immediately on container start (handy for testing).
 - `TZ` — timezone for cron and timestamps.
@@ -125,21 +136,40 @@ To run a backup on demand:
 docker compose exec backup /usr/local/bin/backup.sh
 ```
 
+To retry pending uploads now instead of waiting for the hourly run:
+
+```bash
+docker compose exec backup /usr/local/bin/upload.sh
+```
+
+Both take a lock in `/backups`, so a second copy started meanwhile just logs that it's skipping.
+
 ## Monitoring
 
-Every run, successful or not, ends by writing `${HOME}/backup/metrics/backup.prom`, which the
-monitoring stack's node-exporter reads (textfile collector):
+Every run, successful or not, writes its result to `${HOME}/backup/metrics`, which the
+monitoring stack's node-exporter reads (textfile collector). `backup.prom` covers the local backup
+(`backup.sh`):
 
 | Metric | Meaning |
 |--------|---------|
 | `homelab_backup_last_run_timestamp_seconds` | when the last run ended |
-| `homelab_backup_last_run_success` | `1` if it finished, `0` if a step failed |
-| `homelab_backup_last_success_timestamp_seconds` | when the last successful run ended |
+| `homelab_backup_last_run_success` | `1` if every step succeeded, `0` if any failed |
+| `homelab_backup_last_success_timestamp_seconds` | when the last fully successful run ended |
 | `homelab_backup_size_bytes` | size of the last successful backup |
 
+`offsite.prom` covers the Google Drive copy (`upload.sh`, hourly):
+
+| Metric | Meaning |
+|--------|---------|
+| `homelab_backup_offsite_last_run_timestamp_seconds` | when the last upload run ended |
+| `homelab_backup_offsite_last_run_success` | `1` if everything pending was uploaded and Drive was pruned |
+| `homelab_backup_offsite_last_upload_timestamp_seconds` | when a backup was last verified on Drive |
+| `homelab_backup_offsite_pending` | local backups not yet on Drive |
+
 `monitoring/prometheus/rules/backup.yml` turns them into `BackupFailed` and `BackupStale` (no
-success for 26 h — also what you get when this container is stopped). Until the first run after
-deploying, the metrics don't exist and neither alert can fire. Hermes reads all of this with
+local success for 26 h — also what you get when this container is stopped), both critical, and
+`BackupOffsiteFailing` (warning: uploads failing for 3 h). Until the first run after deploying,
+the metrics don't exist and no alert can fire. Hermes reads all of this with
 `backup-status`.
 
 ## Restore

@@ -150,8 +150,10 @@ Backups (daily at 03:05, local copy plus 7 days on Google Drive):
 sudo -n /usr/local/bin/homelab-manage.sh backup-status   # latest backup's files, checksum check, log, Drive copies
 ```
 
-- "Did the backup work?" → `backup-status`. A missing `SHA256SUMS` means that run stopped early;
-  the log section says at which step. Also `metrics 'homelab_backup_last_run_success'`.
+- "Did the backup work?" → `backup-status`. A failed step is skipped, not fatal: the log section
+  lists `FAILED step:` lines, and that archive is missing from the folder. A `.pending-upload` file
+  means the Drive copy isn't done yet; it is retried hourly at :35. Also
+  `metrics 'homelab_backup_last_run_success'` (local) and `metrics 'homelab_backup_offsite_pending'`.
 
 Media (Sonarr = series, Radarr = movies, Prowlarr = indexers, qBittorrent behind the gluetun VPN):
 

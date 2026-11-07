@@ -383,6 +383,7 @@ backup_status() {
   [[ -n "$latest" ]] || die "no local backup in $archives"
   echo "--- latest local backup: $(basename "$latest")"
   ls -lh "$latest" | tail -n +2
+  [[ -e "$latest/.pending-upload" ]] && echo "not on Google Drive yet: upload pending (retried hourly at :35)"
   echo "--- checksums"
   if [[ ! -f "$latest/SHA256SUMS" ]]; then
     echo "no SHA256SUMS: this run stopped before finishing (see the log below)"
@@ -392,7 +393,7 @@ backup_status() {
   fi
   echo "--- backup log (last run)"
   docker logs --tail 300 "$BACKUP_CONTAINER" 2>&1 |
-    grep -E '===|ready|Uploading|ERROR|Error|error|FAILED|failed|denied' | tail -n 25 || true
+    grep -E '===|ready|Uploading|Uploaded|ERROR|Error|error|FAILED|failed|denied' | tail -n 25 || true
   echo "--- on Google Drive"
   timeout 120 docker exec "$BACKUP_CONTAINER" sh -c \
     'rclone lsf --dirs-only "$RCLONE_REMOTE:$RCLONE_PATH" && echo "latest:" &&
@@ -628,6 +629,7 @@ daily_report() {
   echo "=== backup"
   prometheus_query 'homelab_backup_last_run_success' || true
   prometheus_query '(time() - homelab_backup_last_success_timestamp_seconds) / 3600' | sed 's/$/ hours since last success/' || true
+  prometheus_query 'homelab_backup_offsite_pending' | sed 's/$/ backup(s) waiting for Google Drive/' || true
   echo "=== disk (used %)"
   df -h -x tmpfs -x overlay -x devtmpfs -x squashfs -x efivarfs || true
   echo "=== containers not running or unhealthy"

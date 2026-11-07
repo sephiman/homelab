@@ -12,6 +12,8 @@ services:
       RCLONE_REMOTE: ${RCLONE_REMOTE:-gdrive}
       RCLONE_PATH: ${RCLONE_PATH:-homelab-backups}
       BACKUP_CRON: ${BACKUP_CRON:-5 3 * * *}
+      UPLOAD_CRON: ${UPLOAD_CRON:-35 * * * *}
+      UPLOAD_TIMEOUT: ${UPLOAD_TIMEOUT:-3h}
       LOCAL_KEEP: ${LOCAL_KEEP:-1}
       REMOTE_RETENTION_DAYS: ${REMOTE_RETENTION_DAYS:-7}
       RUN_ON_START: ${RUN_ON_START:-false}
@@ -21,7 +23,8 @@ services:
       - ${HOME}/backup/config/rclone:/config/rclone
       # Local backup archives (staging + short local history).
       - ${HOME}/backup/archives:/backups
-      # Last run's result for Prometheus (node-exporter textfile collector, monitoring stack).
+      # Last runs' results for Prometheus (backup.prom + offsite.prom, read by node-exporter's
+      # textfile collector in the monitoring stack).
       - ${HOME}/backup/metrics:/metrics
       # Sources mounted read-only.
       - ${HOME}/homeassistant:/sources/homeassistant:ro

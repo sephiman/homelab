@@ -3,19 +3,30 @@ groups:
     rules:
       - alert: BackupFailed
         # Written by backup/backup.sh at the end of every run (node-exporter textfile collector).
+        # A failed step doesn't stop the others; the run still uploads whatever it produced.
         expr: homelab_backup_last_run_success == 0
         labels:
           severity: critical
         annotations:
           summary: "Last backup run failed"
-          description: "See `docker compose logs backup` in backup/ for the failing step."
+          description: "At least one step failed; `docker compose logs backup` in backup/ lists the failed steps."
 
       - alert: BackupStale
-        # Daily at 03:05; 26h leaves room for a slow upload. Also fires if the backup container is gone.
+        # Daily at 03:05; 26h leaves room for a slow run. Also fires if the backup container is gone.
         expr: time() - homelab_backup_last_success_timestamp_seconds > 26 * 3600
         for: 30m
         labels:
           severity: critical
         annotations:
-          summary: "No successful backup for {{ $value | humanizeDuration }}"
+          summary: "No successful local backup for {{ $value | humanizeDuration }}"
           description: "The backup container may be stopped, or every run since then failed."
+
+      - alert: BackupOffsiteFailing
+        # Written by backup/upload.sh, which retries pending uploads hourly; 3h = three failed attempts.
+        expr: homelab_backup_offsite_last_run_success == 0
+        for: 3h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Google Drive upload failing ({{ with query \"homelab_backup_offsite_pending\" }}{{ . | first | value }}{{ end }} backup(s) pending)"
+          description: "The local backup is fine; the offsite copy isn't. `docker compose logs backup` in backup/ shows the rclone error."

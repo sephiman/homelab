@@ -9,6 +9,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 CRON="${BACKUP_CRON:-5 3 * * *}"
+UPLOAD_CRON="${UPLOAD_CRON:-35 * * * *}"
 LOG=/var/log/backup.log
 touch "${LOG}"
 
@@ -17,15 +18,17 @@ touch "${LOG}"
 # `export -p` quotes values safely (quotes, spaces, ...), unlike hand-rolled
 # sed quoting; the emitted `declare -x` lines require bash, hence `bash -c`.
 export -p \
-  | grep -E '^declare -x (POSTGRES_|PG_EXCLUDE_DATABASES=|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|TZ=)' \
+  | grep -E '^declare -x (POSTGRES_|PG_EXCLUDE_DATABASES=|RCLONE_|LOCAL_KEEP=|REMOTE_RETENTION_|UPLOAD_TIMEOUT=|TZ=)' \
   > /etc/backup.env
 
 cat > /etc/crontabs/root <<EOF
 ${CRON} bash -c '. /etc/backup.env; /usr/local/bin/backup.sh' >> ${LOG} 2>&1
+${UPLOAD_CRON} bash -c '. /etc/backup.env; /usr/local/bin/upload.sh' >> ${LOG} 2>&1
 EOF
 
 echo "[entrypoint] Backup scheduler started."
 echo "[entrypoint]   schedule: ${CRON}"
+echo "[entrypoint]   upload retries: ${UPLOAD_CRON}"
 echo "[entrypoint]   remote:   ${RCLONE_REMOTE:-gdrive}:${RCLONE_PATH:-homelab-backups}"
 echo "[entrypoint]   retention: keep ${LOCAL_KEEP:-1} local / ${REMOTE_RETENTION_DAYS:-7}d on remote"
 

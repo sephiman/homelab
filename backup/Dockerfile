@@ -12,9 +12,8 @@ RUN apk add --no-cache \
       sqlite \
       postgresql18-client
 
-COPY backup.sh /usr/local/bin/backup.sh
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/entrypoint.sh
+COPY backup.sh upload.sh entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/upload.sh /usr/local/bin/entrypoint.sh
 
 ENV RCLONE_CONFIG=/config/rclone/rclone.conf
 

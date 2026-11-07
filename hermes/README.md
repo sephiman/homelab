@@ -218,8 +218,8 @@ the model when one of its alerts starts firing, so it barely touches the Go usag
 
 "¿funcionó el backup de anoche?" → `backup-status`: the newest dated folder, its files checked
 against `SHA256SUMS`, the backup log and the copies on Google Drive. The backup also exports
-`homelab_backup_*` metrics, and `monitoring/prometheus/rules/backup.yml` alerts when a run fails
-or no run has succeeded for 26 hours (see [backup/README.md](../backup/README.md#monitoring)).
+`homelab_backup_*` metrics, and `monitoring/prometheus/rules/backup.yml` alerts when a run fails,
+no run has succeeded for 26 hours, or the Google Drive upload keeps failing (see [backup/README.md](../backup/README.md#monitoring)).
 
 "¿por qué no se descargó el último episodio de X?" → Hermes follows the chain: is it in the
 library and monitored (`media-title`), what its history says (grabbed, failed, imported), whether
