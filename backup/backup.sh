@@ -86,8 +86,10 @@ log "Archiving rustdesk..."
 tarball "${DEST}/rustdesk.tar.gz" -C /sources/rustdesk .
 
 # Jellyfin: only the config folder, not the media library or cache.
+# metadata/ (~1 GB) is artwork and NFO data a library metadata refresh re-downloads.
 log "Archiving jellyfin config..."
-tarball "${DEST}/jellyfin-config.tar.gz" -C /sources/jellyfin-config .
+tarball "${DEST}/jellyfin-config.tar.gz" --exclude=./metadata --exclude=./log --exclude=./transcodes \
+  -C /sources/jellyfin-config .
 
 # Media apps: config + DB (+ the *arrs' own Backups/ zips); MediaCover is re-downloadable artwork.
 for app in prowlarr sonarr radarr bazarr seerr cleanuparr maintainerr searcharr; do
@@ -127,8 +129,10 @@ log "Local backup ready: $(du -sh "${DEST}" | cut -f1)"
 # 3. Upload to Google Drive ------------------------------------------------
 log "Uploading to ${RCLONE_REMOTE}:${RCLONE_PATH}/${TIMESTAMP} ..."
 # Drive answers bursts with 403 quota errors; throttle and retry instead of failing the run.
+# 128M chunks cut a ~1 GB upload from ~124 requests to ~8; RAM use is chunk size x transfers.
 rclone copy "${DEST}" "${RCLONE_REMOTE}:${RCLONE_PATH}/${TIMESTAMP}" \
   --tpslimit 5 --retries 5 --retries-sleep 1m --low-level-retries 20 \
+  --drive-chunk-size 128M --transfers 2 \
   --stats-one-line --stats=30s
 
 # 4. Local retention: keep only the most recent ${LOCAL_KEEP} backup(s) ----

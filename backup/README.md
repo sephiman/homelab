@@ -9,7 +9,7 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 | `homeassistant`       | full folder; the recorder DB (`home-assistant_v2.db`) as a separate consistent SQLite snapshot |
 | `qbittorrent`         | full folder                       |
 | `rustdesk`            | full folder                       |
-| `jellyfin/config`     | **config only** (no media/cache)  |
+| `jellyfin/config`     | **config only** (no media/cache); no `metadata` (re-downloadable artwork), `log`, `transcodes` |
 | `prowlarr`, `sonarr`, `radarr`, `bazarr`, `seerr`, `cleanuparr` config; `maintainerr`, `searcharr` data | config + DB (+ the *arrs' built-in `Backups/`); no `MediaCover`, `logs` |
 | `vaultwarden/data`    | attachments, sends, `rsa_key.pem` (no `icon_cache`); the vault itself is in PostgreSQL |
 | PostgreSQL            | `pg_dumpall` — all databases + roles |
