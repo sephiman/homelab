@@ -12,7 +12,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 | [`nginx/`](./nginx) | Nginx Proxy Manager — reverse proxy + Let's Encrypt certificates | http://localhost:81 |
 | [`monitoring/`](./monitoring) | Grafana, Prometheus, Alertmanager (→ Telegram), Loki, Alloy, node-exporter, cAdvisor, Dockhand | http://localhost:3000 |
 | [`media/`](./media) | Jellyfin + qBittorrent behind a Surfshark VPN (gluetun) + Prowlarr (+ FlareSolverr)/Sonarr/Radarr/Bazarr/Recyclarr automation, Seerr requests, Searcharr Telegram bot, Cleanuparr/Maintainerr cleanup, Exportarr metrics | http://localhost:8096 |
-| [`remote/`](./remote) | Self-hosted RustDesk (remote access server) | — |
+| [`remote/`](./remote) | Self-hosted RustDesk (remote access server) + Cloudflare DDNS (keeps VPN and RustDesk DNS records in sync) | — |
 | [`vaultwarden/`](./vaultwarden) | Vaultwarden — self-hosted Bitwarden-compatible password manager | https://vault.<your-domain> (via Nginx Proxy Manager) |
 | [`home-automation/`](./home-automation) | Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker) | http://localhost:8123 |
 | [`backup/`](./backup) | Scheduled backups of service data + PostgreSQL, uploaded to Google Drive via rclone | — |

@@ -1,6 +1,6 @@
 # Remote
 
-Remote-access services. For now this folder hosts the self-hosted [RustDesk](https://rustdesk.com/) server — a free alternative to TeamViewer/AnyDesk where the signalling and relay servers run on your own infrastructure instead of the vendor's cloud.
+Remote-access services. For now this folder hosts the self-hosted [RustDesk](https://rustdesk.com/) server — a free alternative to TeamViewer/AnyDesk where the signalling and relay servers run on your own infrastructure instead of the vendor's cloud. It also includes [favonia/cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) to keep your public IP synced with Cloudflare DNS records.
 
 ## Services
 
@@ -8,8 +8,11 @@ Remote-access services. For now this folder hosts the self-hosted [RustDesk](htt
 |---------------|-----------------|-----------------------------------------|-----------------------------------------------------|
 | rustdesk-hbbs | `rustdesk-hbbs` | `21115/tcp`, `21116/tcp`, `21116/udp`   | *ID server* — client registration and NAT hole punching. |
 | rustdesk-hbbr | `rustdesk-hbbr` | `21117/tcp`                             | *Relay server* — fallback when no direct P2P is possible. |
+| cloudflare-ddns | `cloudflare-ddns` | —                                   | *DDNS updater* — keeps Cloudflare DNS records in sync with your public IP every 5 minutes. |
 
 RustDesk needs both processes: `hbbs` so clients can find each other and `hbbr` to relay traffic when a direct connection isn't possible.
+
+`cloudflare-ddns` is a lightweight, hardened Go binary that runs independently from Home Assistant or Nginx, so your remote access stays reachable even if those services go down. It updates both `vpn.jjnoe.com` and `rustdesk.jjnoe.com` (or whichever subdomains you configure) whenever your ISP changes your public IP.
 
 ## Prerequisite
 
@@ -111,3 +114,46 @@ In each client, *Settings → Network → ID/Relay Server*:
   ```
 
 Once the key is configured, the client will only connect through your server.
+
+## Configure Cloudflare DDNS
+
+`cloudflare-ddns` keeps your DNS records (`vpn.jjnoe.com`, `rustdesk.jjnoe.com`, etc.) pointing at your current public IP. It polls every 5 minutes and only updates Cloudflare when the IP actually changes.
+
+### 1. Create an API token in Cloudflare
+
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens).
+2. Click **Create Token**.
+3. Use the **Edit zone DNS** template.
+4. Under **Zone Resources**, pick **Include → Specific zone** and select your domain (e.g. `jjnoe.com`).
+5. Under **Permissions**, make sure it has **Zone → DNS → Edit** for that zone only.
+6. Continue, review, and create. Copy the token — it's shown only once.
+
+### 2. Fill in `.env`
+
+```dotenv
+CLOUDFLARE_API_TOKEN=your_real_token
+DDNS_DOMAINS=vpn.jjnoe.com,rustdesk.jjnoe.com
+DDNS_PROXIED=false
+```
+
+- `DDNS_DOMAINS` is a comma-separated list. Add or remove subdomains freely — the container picks them up on restart.
+- `DDNS_PROXIED=false` is **required** for non-HTTP traffic (WireGuard, RustDesk, SSH). Cloudflare's orange-cloud proxy only routes HTTP/HTTPS.
+
+### 3. Bring the stack up
+
+```bash
+docker compose up -d
+docker compose logs -f cloudflare-ddns
+```
+
+On first boot it will create the A records (if they don't exist yet) and print a success line for each domain. If you see `permission denied` or `token not authorized`, double-check the token's zone scope — it must be limited to your exact domain, not "All zones".
+
+### Hardening notes
+
+The compose file runs the container with minimal privileges:
+
+- `read_only: true` — the container filesystem is mounted read-only (it has no state to persist).
+- `cap_drop: all` — drops every Linux capability.
+- `security_opt: no-new-privileges:true` — prevents privilege escalation inside the container.
+- `network_mode: host` — lets it detect the host's public IP without needing Docker port mapping.
+- `IP6_PROVIDER=none` — skips IPv6 detection (most residential setups don't need it; remove this line if you use native IPv6).

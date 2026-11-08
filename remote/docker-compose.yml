@@ -25,6 +25,22 @@ services:
     networks:
       - my-network
 
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:latest
+    container_name: cloudflare-ddns
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop:
+      - all
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - DOMAINS=${DDNS_DOMAINS}
+      - PROXIED=${DDNS_PROXIED:-false}
+      - IP6_PROVIDER=none
+
 networks:
   my-network:
     external: true
