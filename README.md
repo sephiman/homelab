@@ -20,14 +20,6 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 
 Each stack's README covers its ports, volumes, first-run steps and gotchas.
 
-## Tools
-
-Not compose stacks — run on the workstation, not the homelab host.
-
-| Tool | What it does |
-|------|--------------|
-| [`coding-agent/`](./coding-agent) | Vendor-agnostic coding agent: an architect → implementer → verifier pipeline that drives Claude Code, Gemini CLI and OpenCode headlessly, so each role uses the right subscription or price tier under one set of coding rules |
-
 ## Shared network (`all_dockers`)
 
 Every stack joins the same external Docker network called **`all_dockers`** (aliased as `my-network` inside each compose file). This lets containers in different stacks talk to each other by container name — e.g. Nginx Proxy Manager can reach `pgadmin` or `jellyfin` directly without publishing their ports to the host.
