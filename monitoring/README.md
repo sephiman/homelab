@@ -147,12 +147,11 @@ Prometheus evaluates the rules in `prometheus/rules/*.yml` and pushes firing ale
 
 Alertmanager can't read env vars in its config, so compose hands both values over as secrets (`/run/secrets/telegram_*`) read by `alertmanager/alertmanager.yml`. Left empty, Alertmanager still runs but every send fails with `Unauthorized` in `docker logs alertmanager`.
 
-Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertname`, re-sent every 4h while firing (`ImageScansStale` once a day). Silence one for maintenance at http://localhost:9093.
+Routing lives in `alertmanager/alertmanager.yml`: alerts are grouped by `alertname`, re-sent every 4h while firing. Silence one for maintenance at http://localhost:9093.
 
 Baseline rules in `prometheus/rules/home-automation.yml`:
 `HomeAssistantDown`, `MosquittoDown`, `HostHighMemory`, `HostHighDisk`, `ContainerRestartingLoop`.
-`prometheus/rules/security.yml` adds `ImageScansStale`, from
-Dockhand's image scans (vulnerability counts are not alerted on — check Dockhand → Images). `prometheus/rules/backup.yml` has `BackupFailed`, `BackupStale` and `BackupOffsiteFailing`, from
+Dockhand's image scans are not alerted on — check Dockhand → Images. `prometheus/rules/backup.yml` has `BackupFailed`, `BackupStale` and `BackupOffsiteFailing`, from
 the metrics the backup stack writes for node-exporter's textfile collector
 (`${HOME}/backup/metrics`, see [backup/README.md](../backup/README.md#monitoring)).
 To add one, drop it in a file there and `docker compose restart prometheus`.
