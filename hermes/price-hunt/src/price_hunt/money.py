@@ -4,8 +4,8 @@ from price_hunt.errors import InvalidInputError
 
 
 def parse_euros(text: str) -> int:
-    """Euro amount as typed ("14", "14.5", "14,50", "€14") to cents."""
-    cleaned = text.strip().removeprefix("€").strip().replace(",", ".")
+    """Euro amount as typed ("14", "14.5", "14,50", "€14", "14€") to cents."""
+    cleaned = text.strip().removeprefix("€").removesuffix("€").strip().replace(",", ".")
     try:
         amount = Decimal(cleaned)
     except InvalidOperation:

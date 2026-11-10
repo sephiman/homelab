@@ -28,7 +28,7 @@ _PACE_SECONDS = 1.0
 _ITEM_URL = re.compile(r"/item/(\d+)\.html")
 _OG_TITLE_RE = re.compile(r'<meta[^>]+property="og:title"[^>]+content="([^"]*)"', re.I)
 _OG_SUFFIX_RE = re.compile(r"\s*-\s*AliExpress(?:\s+\d+)?\s*$", re.I)
-_SOLD_RE = re.compile(r"([\d,]+)\s*sold", re.I)
+_SOLD_RE = re.compile(r"([\d,]+)\+?\s*sold", re.I)
 # Words safe for a search slug: slashes/brackets in listing titles break /w/wholesale- URLs.
 _TITLE_WORD = re.compile(r"[a-zA-Z0-9]+")
 
@@ -242,10 +242,9 @@ class AliExpressClient:
 
         data = _as_dict(init_data.get("data"))
         fields = _as_dict(_as_dict(data.get("root")).get("fields"))
-        item_list = _as_dict(_as_dict(fields.get("mods")).get("itemList"))
-        if "content" not in item_list:
-            raise AliExpressError("unexpected search page data structure")
-        items = _as_list(item_list.get("content"))
+        # An obscure query leaves itemList/content out of the page entirely: that is an empty
+        # result, not a broken page (only a page without _init_data_ at all is).
+        items = _as_list(_as_dict(_as_dict(fields.get("mods")).get("itemList")).get("content"))
 
         products: list[Product] = []
         seen: set[str] = set()

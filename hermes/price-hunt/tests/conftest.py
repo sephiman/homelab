@@ -29,6 +29,7 @@ class FakeAliExpress:
     url: str
     products: dict[str, FakeOffer] = field(default_factory=dict)
     error: str | None = None
+    no_item_list: bool = False
     requests: list[dict[str, str]] = field(default_factory=list)
 
     def offer(
@@ -76,11 +77,12 @@ class FakeAliExpress:
             }
             for p in matching
         ]
+        mods: dict[str, object] = {} if self.no_item_list else {"itemList": {"content": items}}
         init_data = {
             "data": {
                 "root": {
                     "fields": {
-                        "mods": {"itemList": {"content": items}},
+                        "mods": mods,
                         "pageInfo": {"totalResults": len(matching), "page": 1},
                     }
                 }

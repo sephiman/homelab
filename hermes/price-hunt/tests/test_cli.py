@@ -42,6 +42,17 @@ def test_search_reports_nothing_found(aliexpress: FakeAliExpress, capsys: pytest
     assert "nothing found for 'unobtainium'" in out
 
 
+def test_search_without_item_list_reports_nothing_found(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.no_item_list = True
+
+    code, out, _ = run(capsys, "search", "obscure")
+
+    assert code == 0
+    assert "nothing found for 'obscure'" in out
+
+
 def test_watch_add_takes_the_id_from_an_item_link(
     aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
 ) -> None:
