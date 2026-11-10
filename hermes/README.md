@@ -24,6 +24,7 @@ dangerous-command checks on container backends.
 | Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
 | Postgres: reading `crypto_ambush`, `sharedledger`, `tradelog` and `tradeschool`, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; `CONNECT` granted only on those databases |
 | Project source code (`code-ls`, `code-show`, `code-grep`) and `git-pull` | Read from git `HEAD` as the folder's owner — gitignored files (`.env`…) are unreachable and secret-looking files (`.env*`, `*.key`, `*secret*`…) are refused even if committed |
+| AliExpress product search and price watches (`price-hunt`) | Unprivileged CLI in `/usr/local/bin` (root-owned), stdlib Python; reads the public AliExpress site over 443, no API key needed |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
 | Denied | How |
@@ -82,6 +83,8 @@ can't restart anything. To switch a toolset off entirely, list it under
 | `config.yaml` | `/etc/hermes/config.yaml` — Hermes' managed config (root-owned; wins over its own config) |
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
 | `AGENTS.md` | `/home/hermes/workspace/AGENTS.md`, symlinked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
+| `price-hunt/` | `/usr/local/lib/price-hunt` + `/usr/local/bin/price-hunt` (root-owned) — [price hunting](#price-hunting) |
+| `skills/price-hunter/SKILL.md` | `/home/hermes/.hermes/skills/shopping/price-hunter/` (root-owned file) |
 | `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs) |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
@@ -231,7 +234,7 @@ the host's IP. It reports and suggests; it can't grab, delete or change profiles
 
 ## Scheduled jobs
 
-Three jobs, each gathering their data in a pre-run script (`scripts/`, run as `hermes` through the
+Four jobs, each gathering their data in a pre-run script (`scripts/`, run as `hermes` through the
 wrapper) so the model gets one prompt and **no tools**:
 
 | Job | Schedule | Model requests |
@@ -239,6 +242,7 @@ wrapper) so the model gets one prompt and **no tools**:
 | Morning summary (`daily-report.sh`) | daily | 1 per day |
 | Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
+| Price watch (`price-watch.sh`) | every 6 h | only when a watch reaches its target or a product disappears |
 
 The alert watcher sends a diagnosis next to Alertmanager's own message: which container, its
 state and recent logs, errors across projects, and backup/media/Home Assistant/host details when
@@ -275,6 +279,27 @@ nothing. All jobs follow `timezone: Europe/Madrid` in `config.yaml`, whatever th
 
 Change the summary's language or contents by editing its prompt: `hermes cron edit <job_id>
 --prompt '…'`. Pause one with `hermes cron pause <job_id>`.
+
+## Price hunting
+
+Ask in chat where something is cheapest, delivered to the Netherlands — "find a Shelly Plus 1PM
+cheaper" — or for an alert — "tell me when it drops below €14". The `price-hunter` skill drives
+[`price-hunt`](./price-hunt):
+
+| Shop | Search | Price alerts |
+|------|--------|--------------|
+| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add <link> <€>`; the `price-watch` job checks every 6 h and messages you once per drop |
+| Amazon.nl / Amazon.de | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
+
+Watches and their price history live in `/home/hermes/.hermes/state/prices.db` (SQLite). Prices
+may leave out shipping, and the cheapest results are often a variant or an accessory; the skill
+tells Hermes to filter those and say so.
+
+The tool works out of the box after installation — no API keys or affiliate program signup
+required. Check it: `sudo -iu hermes price-hunt search shelly plus 1pm`.
+
+Develop and test it with `uv` from `price-hunt/`: `uv run pytest`, `uv run mypy`,
+`uv run ruff check`. The tests run the CLI against a fake AliExpress site, no network needed.
 
 ## Web dashboard
 
