@@ -60,7 +60,7 @@ def _watch_add(args: argparse.Namespace) -> int:
     store.record_price(watch.id, product.price_cents, now)
     print(
         f"Watching #{watch.id}: {product.title}\n"
-        f"now {format_euros(product.price_cents)}, target {format_euros(target)}, checked every 6 hours\n"
+        f"now {format_euros(product.price_cents)}, target {format_euros(target)}, checked hourly\n"
         f"{product.url}"
     )
     if product.price_cents <= target:

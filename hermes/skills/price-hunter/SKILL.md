@@ -32,7 +32,7 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
 ## "Tell me when X drops to €Y"
 
 - **AliExpress:** `price-hunt watch add <link or id> <euros>`. A search result's id (`[1005…]`)
-  works as well as a link. One scheduled job (`price-watch`, every 6 hours) checks every watch
+  works as well as a link. One scheduled job (`price-watch`, hourly) checks every watch
   and messages the user when one reaches its target, once per drop. Never create a cron job for
   an alert: the existing job covers all of them.
 - **Amazon.nl / Amazon.de:** you can't watch Amazon. Tell the user to set a price tracker with

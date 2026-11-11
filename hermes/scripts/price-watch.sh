@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes cron pre-run script, every 6 hours: prints AliExpress watches that reached their target or
+# Hermes cron pre-run script, hourly: prints AliExpress watches that reached their target or
 # disappeared since the last run, and an API failure once. Nothing new prints nothing, and Hermes
 # then skips the model.
 set -euo pipefail

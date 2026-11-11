@@ -209,7 +209,7 @@ schedule_jobs() {
   schedule_job morning-summary '0 8 * * *' daily-report.sh "$MORNING_SUMMARY_PROMPT" "$telegram_id"
   schedule_job holdings-report '10 8 * * *' holdings-report.sh "$HOLDINGS_REPORT_PROMPT" "$telegram_id"
   schedule_job alert-diagnosis 'every 5m' alert-watch.sh "$ALERT_DIAGNOSIS_PROMPT" "$telegram_id"
-  schedule_job price-watch 'every 6h' price-watch.sh "$PRICE_WATCH_PROMPT" "$telegram_id"
+  schedule_job price-watch 'every 1h' price-watch.sh "$PRICE_WATCH_PROMPT" "$telegram_id"
 }
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"

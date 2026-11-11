@@ -242,7 +242,7 @@ wrapper) so the model gets one prompt and **no tools**:
 | Morning summary (`daily-report.sh`) | daily | 1 per day |
 | Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
-| Price watch (`price-watch.sh`) | every 6 h | only when a watch reaches its target or a product disappears |
+| Price watch (`price-watch.sh`) | hourly | only when a watch reaches its target or a product disappears |
 
 The alert watcher sends a diagnosis next to Alertmanager's own message: which container, its
 state and recent logs, errors across projects, and backup/media/Home Assistant/host details when
@@ -288,7 +288,7 @@ cheaper" — or for an alert — "tell me when it drops below €14". The `price
 
 | Shop | Search | Price alerts |
 |------|--------|--------------|
-| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add <link> <€>`; the `price-watch` job checks every 6 h and messages you once per drop |
+| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add <link> <€>`; the `price-watch` job checks hourly and messages you once per drop |
 | Amazon.nl / Amazon.de | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
 
 Watches and their price history live in `/home/hermes/.hermes/state/prices.db` (SQLite). Prices
