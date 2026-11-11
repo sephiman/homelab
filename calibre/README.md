@@ -122,6 +122,36 @@ Click **Save**.
 5. Save the file and safely eject/unmount your Kobo.
 6. Connect the Kobo to Wi-Fi and tap the **Sync** icon. Your Calibre-Web library and shelves will synchronize wirelessly.
 
+> **Note on recent firmware updates:** If a firmware update resets or ignores the `api_endpoint` in `Kobo eReader.conf`, set the custom `api_endpoint` right after a factory reset / fresh update *before* completing account sign-in on the device so the initial registration handshake binds to Calibre-Web. Alternatively, use **KOReader (OPDS)** or the **Built-in Web Browser** below.
+
+---
+
+## Over-the-Air Alternatives for Kobo
+
+If you do not want to modify `Kobo eReader.conf` or want a method immune to firmware updates:
+
+### Alternative 1: KOReader + OPDS (Recommended for Power Users)
+
+[KOReader](https://koreader.rocks/) is a popular open-source document viewer that installs alongside the stock Kobo OS without replacing it:
+
+1. Install KOReader on your Kobo (via the one-click package or NickelMenu).
+2. Ensure OPDS is enabled in Calibre-Web (**Admin** -> **Edit Basic Configuration** -> **Feature Configuration** -> check **Enable OPDS Catalog**).
+3. In KOReader:
+   - Tap the top menu -> **Search / Bookmarks** -> **OPDS catalog** -> **Add new catalog**.
+   - **Catalog Name:** `Calibre-Web`
+   - **Catalog URL:** `https://books.example.com/opds`
+   - Enter your Calibre-Web username and password.
+4. Browse your library by author, tag, or series, and tap any book to download it directly over Wi-Fi.
+
+### Alternative 2: Built-in Kobo Web Browser (Zero Installation)
+
+Stock Kobo firmware includes an experimental web browser:
+
+1. On your Kobo, go to **More** -> **Beta Features** -> **Web Browser**.
+2. Navigate to `https://books.example.com` and log into Calibre-Web.
+3. Bookmark the page for quick future access.
+4. Browse or search your library. Tapping **Download** on any EPUB or KePub file downloads it to the Kobo's internal storage, and the stock library automatically imports it.
+
 ---
 
 ## Ingesting Books
