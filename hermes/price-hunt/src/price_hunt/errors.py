@@ -6,5 +6,9 @@ class AliExpressError(PriceHuntError):
     pass
 
 
+class VerifierError(PriceHuntError):
+    pass
+
+
 class InvalidInputError(PriceHuntError):
     pass

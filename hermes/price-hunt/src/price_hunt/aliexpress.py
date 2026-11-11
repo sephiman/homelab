@@ -5,7 +5,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping
 from dataclasses import dataclass
 from html import unescape
 
@@ -21,7 +20,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 )
 USUC_COOKIE = f"site=glo&c_tp={CURRENCY}&region={SHIP_TO_COUNTRY}&b_locale={LOCALE}"
-_ALIEXPRESS_BASE = "https://www.aliexpress.com"
+ALIEXPRESS_BASE = "https://www.aliexpress.com"
 # Spacing between back-to-back AliExpress hits: bursts are what trips its anti-bot.
 _PACE_SECONDS = 1.0
 
@@ -29,8 +28,6 @@ _ITEM_URL = re.compile(r"/item/(\d+)\.html")
 _OG_TITLE_RE = re.compile(r'<meta[^>]+property="og:title"[^>]+content="([^"]*)"', re.I)
 _OG_SUFFIX_RE = re.compile(r"\s*-\s*AliExpress(?:\s+\d+)?\s*$", re.I)
 _SOLD_RE = re.compile(r"([\d,]+)\+?\s*sold", re.I)
-# Words safe for a search slug: slashes/brackets in listing titles break /w/wholesale- URLs.
-_TITLE_WORD = re.compile(r"[a-zA-Z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -50,6 +47,15 @@ def product_id_in(text: str) -> str | None:
         return stripped
     match = _ITEM_URL.search(stripped)
     return match.group(1) if match else None
+
+
+def item_url(product_id: str) -> str:
+    return f"{ALIEXPRESS_BASE}/item/{product_id}.html"
+
+
+def search_url(keywords: str) -> str:
+    slug = urllib.parse.quote(keywords.strip().replace(" ", "-"), safe="-").lower()
+    return f"{ALIEXPRESS_BASE}/w/wholesale-{slug}.html"
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +191,7 @@ def _parse_product(raw: object) -> Product | None:
         title=title,
         price_cents=price_cents,
         original_price_cents=original_price_cents,
-        url=f"{_ALIEXPRESS_BASE}/item/{pid}.html",
+        url=item_url(pid),
         rating=_text(_as_dict(raw.get("evaluation")).get("starRating")),
         sold=_parse_sold(_text(_as_dict(raw.get("trade")).get("tradeDesc"))),
     )
@@ -197,10 +203,13 @@ def _parse_product(raw: object) -> Product | None:
 
 
 class AliExpressClient:
-    def __init__(self, settings: Settings, timeout_seconds: float = 20, base_url: str | None = None) -> None:
+    def __init__(self, settings: Settings, timeout_seconds: float = 20) -> None:
         self._settings = settings
         self._timeout = timeout_seconds
-        self._base_url = base_url or _ALIEXPRESS_BASE
+
+    @property
+    def _base_url(self) -> str:
+        return ALIEXPRESS_BASE
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -211,7 +220,8 @@ class AliExpressClient:
             "Referer": f"{self._base_url}/",
         }
 
-    def _pace(self) -> None:
+    def pace(self) -> None:
+        """Spacing between back-to-back AliExpress hits; bursts are what trips its anti-bot."""
         if _PACE_SECONDS > 0:
             time.sleep(_PACE_SECONDS)
 
@@ -227,8 +237,7 @@ class AliExpressClient:
         return html
 
     def search(self, keywords: str, max_price_cents: int | None = None, page_size: int = 20) -> list[Product]:
-        slug = urllib.parse.quote(keywords.strip().replace(" ", "-"), safe="-").lower()
-        url = f"{self._base_url}/w/wholesale-{slug}.html"
+        url = search_url(keywords)
         params: dict[str, str] = {}
         if max_price_cents is not None:
             params["maxPrice"] = f"{max_price_cents // 100}.{max_price_cents % 100:02d}"
@@ -257,47 +266,19 @@ class AliExpressClient:
                 break
         return products
 
-    def lookup(self, product_id: str) -> Product | None:
-        """Look up a single product: fetch its page title, then search for its price."""
+    def page_title(self, product_id: str) -> str | None:
+        """The listing title from the product page's og:title, or None when there is no page."""
         html = self._fetch(f"{self._base_url}/item/{product_id}.html")
-        title = _extract_title_from_page(html)
-        if title is None:
-            return None
-        return self._find_in_search(product_id, title)
-
-    def products(self, known: Mapping[str, str]) -> list[Product]:
-        """Batch lookup. *known* maps product_id → title (from the watch DB)."""
-        found: list[Product] = []
-        for index, (product_id, title) in enumerate(known.items()):
-            if index:
-                self._pace()
-            product = self._find_in_search(product_id, title)
-            if product is not None:
-                found.append(product)
-        return found
-
-    def _find_in_search(self, product_id: str, title: str) -> Product | None:
-        words = _TITLE_WORD.findall(title)
-        if not words:
-            return None
-        # Try progressively shorter searches, down to all words if the title is short.
-        lengths = [n for n in (10, 7, 5) if len(words) >= n] or [len(words)]
-        for attempt, n in enumerate(lengths):
-            if attempt:
-                self._pace()
-            results = self.search(" ".join(words[:n]), page_size=60)
-            for product in results:
-                if product.product_id == product_id:
-                    return product
-        return None
+        return _extract_title_from_page(html)
 
     def resolve_product_id(self, reference: str) -> str:
         product_id = product_id_in(reference)
         if product_id:
             return product_id
-        if not reference.startswith("https://"):
-            raise InvalidInputError(f"not an AliExpress product id or https link: {reference!r}")
-        request = urllib.request.Request(reference, headers=self._headers())
+        if not reference.startswith(("https://", "http://", "www.")):
+            raise InvalidInputError(f"not an AliExpress product id or link: {reference!r}")
+        url = reference if reference.startswith(("https://", "http://")) else f"https://{reference}"
+        request = urllib.request.Request(url, headers=self._headers())
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 final_url = response.geturl()

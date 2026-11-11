@@ -2,7 +2,7 @@ import json
 import re
 import threading
 import urllib.parse
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -10,6 +10,30 @@ from pathlib import Path
 import pytest
 
 import price_hunt.aliexpress as aliexpress_module
+import price_hunt.cli as cli_module
+from price_hunt.aliexpress import Product
+from price_hunt.errors import VerifierError
+
+
+@dataclass
+class FakeVerifier:
+    """Stands in for the LLM listing verifier; defaults to accepting every offer."""
+
+    verdicts: dict[str, bool] = field(default_factory=dict)
+    renames: dict[str, str] = field(default_factory=dict)
+    calls: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    name_calls: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def matching_ids(self, query: str, offers: Sequence[Product]) -> set[str]:
+        self.calls.append((query, tuple(o.product_id for o in offers)))
+        if self.error:
+            raise VerifierError(self.error)
+        return {o.product_id for o in offers if self.verdicts.get(o.product_id, True)}
+
+    def product_name(self, listing_title: str) -> str | None:
+        self.name_calls.append(listing_title)
+        return self.renames.get(listing_title, listing_title)
 
 
 @dataclass
@@ -24,12 +48,17 @@ class FakeOffer:
 
 @dataclass
 class FakeAliExpress:
-    """Stands in for www.aliexpress.com: serves search HTML and product pages."""
+    """Stands in for www.aliexpress.com: serves search HTML, product pages and chat completions."""
 
     url: str
     products: dict[str, FakeOffer] = field(default_factory=dict)
     error: str | None = None
+    search_error: str | None = None
     no_item_list: bool = False
+    llm_reply: str = ""
+    llm_requests: list[dict[str, object]] = field(default_factory=list)
+    llm_auth: list[str] = field(default_factory=list)
+    verifier: FakeVerifier = field(default_factory=FakeVerifier)
     requests: list[dict[str, str]] = field(default_factory=list)
 
     def offer(
@@ -52,7 +81,7 @@ class FakeAliExpress:
 
     def search_html(self, slug: str, params: dict[str, str]) -> str:
         self.requests.append({"kind": "search", "slug": slug, **params})
-        if self.error:
+        if self.error or self.search_error:
             return "<html>_____tmd_____ verification</html>"
         slug_words = set(slug.lower().replace("-", " ").split())
         matching = [p for p in self.products.values() if slug_words & set(p.title.lower().split())]
@@ -137,6 +166,17 @@ def _handler(fake: FakeAliExpress) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
+        def do_POST(self) -> None:
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            fake.llm_requests.append(json.loads(body))
+            fake.llm_auth.append(self.headers.get("Authorization") or "")
+            payload = json.dumps({"choices": [{"message": {"content": fake.llm_reply}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
         def log_message(self, format: str, *args: object) -> None:
             pass
 
@@ -151,10 +191,7 @@ def aliexpress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fake
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    monkeypatch.setattr(
-        aliexpress_module,
-        "_ALIEXPRESS_BASE",
-        fake.url,
-    )
+    monkeypatch.setattr(aliexpress_module, "ALIEXPRESS_BASE", fake.url)
+    monkeypatch.setattr(cli_module, "build_verifier", lambda: fake.verifier)
     yield fake
     server.shutdown()

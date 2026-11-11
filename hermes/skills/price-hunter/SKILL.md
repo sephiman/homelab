@@ -10,6 +10,7 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
 
 ```
 /usr/local/bin/price-hunt search <keywords> [--max <euros>] [--limit N]   # cheapest first, plus Amazon search links
+/usr/local/bin/price-hunt watch add "<product name>" <target euros>
 /usr/local/bin/price-hunt watch add <aliexpress link or product id> <target euros>
 /usr/local/bin/price-hunt watch list
 /usr/local/bin/price-hunt watch rm <id>
@@ -31,10 +32,15 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
 
 ## "Tell me when X drops to €Y"
 
-- **AliExpress:** `price-hunt watch add <link or id> <euros>`. A search result's id (`[1005…]`)
-  works as well as a link. One scheduled job (`price-watch`, hourly) checks every watch
-  and messages the user when one reaches its target, once per drop. Never create a cron job for
-  an alert: the existing job covers all of them.
+- **AliExpress:** `price-hunt watch add "<product name>" <euros>` watches the **cheapest offer
+  across all sellers**, not one listing: every hourly check runs the search and a model call
+  classifies new cheap listings as the product or as accessories/variants (the verdict is
+  cached, so quiet hours cost nothing). It messages the user when the cheapest verified offer
+  reaches the target or sets a new low, once per price. `watch add <link or id> <euros>` starts
+  from a specific listing: the model extracts the clean product name from its title, and
+  cheaper verified offers from other sellers alert too. One scheduled job (`price-watch`,
+  hourly) checks every watch. Never create a cron job for an alert: the existing job covers
+  all of them.
 - **Amazon.nl / Amazon.de:** you can't watch Amazon. Tell the user to set a price tracker with
   the Keepa extension on the product page (or on keepa.com), which alerts them itself.
 - "My alerts" → `watch list`; "stop watching X" → `watch list` to find its id, then `watch rm <id>`.

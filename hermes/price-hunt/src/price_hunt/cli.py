@@ -1,12 +1,14 @@
 import argparse
+import contextlib
 import sys
 import urllib.parse
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from price_hunt.aliexpress import AliExpressClient, Product
-from price_hunt.checking import LOWEST_PRICE_WINDOW, Finding, FindingKind, check_watches
-from price_hunt.errors import AliExpressError, InvalidInputError, PriceHuntError
+from price_hunt.aliexpress import AliExpressClient, Product, item_url, search_url
+from price_hunt.checking import LOWEST_PRICE_WINDOW, Finding, FindingKind, check_watch, check_watches
+from price_hunt.errors import InvalidInputError, PriceHuntError, VerifierError
+from price_hunt.llm import ListingVerifier, load_llm_config
 from price_hunt.money import format_euros, parse_euros
 from price_hunt.settings import load_settings
 from price_hunt.watches import WatchStore
@@ -16,6 +18,12 @@ SEARCH_FOOTNOTE = (
     "may not be included, so confirm on the product page."
 )
 AMAZON_SEARCHES = (("Amazon.nl", "https://www.amazon.nl/s?k="), ("Amazon.de", "https://www.amazon.de/s?k="))
+
+
+def build_verifier() -> ListingVerifier | None:
+    """Hermes' own model as the listing verifier; None when unconfigured (watches degrade)."""
+    config = load_llm_config()
+    return ListingVerifier(config) if config is not None else None
 
 
 def _product_line(product: Product) -> str:
@@ -50,20 +58,52 @@ def _watch_add(args: argparse.Namespace) -> int:
     target = parse_euros(args.target)
     settings = load_settings()
     client = AliExpressClient(settings)
-    product_id = client.resolve_product_id(args.product)
-    product = client.lookup(product_id)
-    if product is None:
-        raise InvalidInputError(f"AliExpress returns no product {product_id} for delivery to NL")
+    verifier = build_verifier()
     store = WatchStore(settings.db_path)
     now = datetime.now(UTC)
-    watch = store.add(product, target, now)
-    store.record_price(watch.id, product.price_cents, now)
+
+    reference = args.product.strip()
+    if not reference:
+        raise InvalidInputError("name a product or paste an AliExpress link")
+    if reference.isdigit() or reference.startswith(("https://", "http://", "www.")):
+        product_id = client.resolve_product_id(reference)
+        page_title = client.page_title(product_id)
+        if page_title is None:
+            raise InvalidInputError(
+                f"AliExpress returns no listing {product_id}: paste the /item/<id>.html link"
+            )
+        query = None
+        if verifier is not None:
+            with contextlib.suppress(VerifierError):
+                query = verifier.product_name(page_title)
+        watch = store.add(product_id, query or page_title, item_url(product_id), target, now)
+        store.save_verdicts(watch.id, {product_id: True})
+    else:
+        watch = store.add("", reference, search_url(reference), target, now)
+
+    try:
+        outcome = check_watch(store, client, verifier, watch, now)
+    except PriceHuntError as error:
+        # The watch stays: the hourly job retries the failed first check.
+        print(
+            f"Watching #{watch.id}: {watch.title}\n"
+            f"now unknown, target {format_euros(target)}, checked hourly\n"
+            f"{watch.url}\n"
+            f"First check failed ({error}); the hourly job will retry."
+        )
+        return 0
+    if watch.product_id and outcome.own_cents is not None:
+        now_text = format_euros(outcome.own_cents)
+    elif outcome.cheapest_cents is not None:
+        now_text = f"{format_euros(outcome.cheapest_cents)} (cheapest verified)"
+    else:
+        now_text = "unknown"
     print(
-        f"Watching #{watch.id}: {product.title}\n"
-        f"now {format_euros(product.price_cents)}, target {format_euros(target)}, checked hourly\n"
-        f"{product.url}"
+        f"Watching #{watch.id}: {watch.title}\n"
+        f"now {now_text}, target {format_euros(target)}, checked hourly\n"
+        f"{watch.url}"
     )
-    if product.price_cents <= target:
+    if outcome.cheapest_cents is not None:
         print("It is already at or below the target.")
     return 0
 
@@ -108,10 +148,13 @@ def _finding_text(finding: Finding) -> str:
         )
     assert finding.price_cents is not None
     lowest = f"; lowest in 30 days {format_euros(finding.lowest_cents)}" if finding.lowest_cents else ""
-    return (
+    text = (
         f"TARGET REACHED #{watch.id}: {watch.title} is {format_euros(finding.price_cents)} "
-        f"(target {format_euros(watch.target_cents)}{lowest})\n{watch.url}"
+        f"(target {format_euros(watch.target_cents)}{lowest})"
     )
+    if finding.offer_url and finding.offer_url != watch.url:
+        return f"{text}\ncheapest offer: {finding.offer_title}\n{finding.offer_url}"
+    return f"{text}\n{watch.url}"
 
 
 def _check(_: argparse.Namespace) -> int:
@@ -119,9 +162,9 @@ def _check(_: argparse.Namespace) -> int:
     settings = load_settings()
     store = WatchStore(settings.db_path)
     try:
-        findings = check_watches(store, AliExpressClient(settings), datetime.now(UTC))
-    except AliExpressError as error:
-        # Reported once per distinct error, not every run while the API stays down.
+        findings = check_watches(store, AliExpressClient(settings), build_verifier(), datetime.now(UTC))
+    except PriceHuntError as error:
+        # Reported once per distinct error, not every run while the API or model stays down.
         if store.last_error() != str(error):
             print(f"PRICE CHECK FAILED: {error}")
             store.set_last_error(str(error))
@@ -145,8 +188,10 @@ def _parser() -> argparse.ArgumentParser:
     search.set_defaults(run=_search)
 
     watch = commands.add_parser("watch", help="price-drop watches").add_subparsers(required=True)
-    add = watch.add_parser("add", help="watch a product until it costs the target or less")
-    add.add_argument("product", help="AliExpress product link or id")
+    add = watch.add_parser(
+        "add", help="watch the cheapest offer of a product until it costs the target or less"
+    )
+    add.add_argument("product", help="product name, AliExpress product link or id")
     add.add_argument("target", help="target price in euros")
     add.set_defaults(run=_watch_add)
     watch.add_parser("list").set_defaults(run=_watch_list)

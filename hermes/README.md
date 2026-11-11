@@ -288,12 +288,16 @@ cheaper" — or for an alert — "tell me when it drops below €14". The `price
 
 | Shop | Search | Price alerts |
 |------|--------|--------------|
-| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add <link> <€>`; the `price-watch` job checks hourly and messages you once per drop |
+| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add "<name>" <€>` or `<link> <€>`; the `price-watch` job checks hourly for the cheapest verified offer across sellers and messages you once per new low |
 | Amazon.nl / Amazon.de | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
 
-Watches and their price history live in `/home/hermes/.hermes/state/prices.db` (SQLite). Prices
-may leave out shipping, and the cheapest results are often a variant or an accessory; the skill
-tells Hermes to filter those and say so.
+Watches match listings with the help of the model (the same one Hermes chats with, read from
+its managed config): each hourly check searches the product's name, and the model classifies
+new listings at or below the target as the product or as accessories/variants — verdicts are
+cached in `prices.db`, so a quiet hour makes no model call. Alerts fire when the cheapest
+verified offer reaches the target or undercuts the last notified price. Prices may leave out
+shipping, and unverified cheap results are often a variant or an accessory; the skill tells
+Hermes to filter those and say so.
 
 The tool works out of the box after installation — no API keys or affiliate program signup
 required. Check it: `sudo -iu hermes price-hunt search shelly plus 1pm`.

@@ -1,6 +1,7 @@
 import pytest
 from conftest import FakeAliExpress
 
+import price_hunt.cli as cli_module
 from price_hunt.cli import main
 
 
@@ -72,7 +73,7 @@ def test_watch_add_rejects_a_product_not_offered_to_nl(
     code, _, err = run(capsys, "watch", "add", "999", "14")
 
     assert code == 1
-    assert "no product 999 for delivery to NL" in err
+    assert "no listing 999" in err
 
 
 def test_check_is_silent_while_the_price_stays_above_target(
@@ -148,3 +149,144 @@ def test_watch_rm_stops_the_watch(aliexpress: FakeAliExpress, capsys: pytest.Cap
     assert out == "Removed watch #1.\n"
     _, listing, _ = run(capsys, "watch", "list")
     assert listing == "No AliExpress price watches.\n"
+
+
+def test_watch_add_takes_the_id_from_www_and_http_item_links(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("1005006789", "15.20")
+
+    for reference in (
+        "www.aliexpress.com/item/1005006789.html",
+        "http://www.aliexpress.com/item/1005006789.html",
+    ):
+        code, out, _ = run(capsys, "watch", "add", reference, "14")
+
+        assert code == 0
+        assert "Watching #1: Shelly Plus 1PM\nnow €15.20, target €14.00" in out
+        run(capsys, "watch", "rm", "#1")
+
+
+def test_watch_add_keeps_the_watch_when_the_first_check_fails(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20")
+    aliexpress.search_error = "blocked"
+
+    code, out, _ = run(capsys, "watch", "add", "111", "14")
+
+    assert code == 0
+    assert "Watching #1: Shelly Plus 1PM" in out
+    assert "First check failed (blocked by AliExpress anti-bot protection)" in out
+    _, listing, _ = run(capsys, "watch", "list")
+    assert "#1 Shelly Plus 1PM" in listing
+
+
+def test_watch_add_by_name_tracks_the_cheapest_verified_offer(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+    aliexpress.offer("222", "2.10", "Wall bracket mount for Shelly")
+    aliexpress.verifier.verdicts["222"] = False
+
+    code, out, _ = run(capsys, "watch", "add", "shelly plus 1pm", "14")
+
+    assert code == 0
+    assert "Watching #1: shelly plus 1pm\nnow €13.49 (cheapest verified), target €14.00" in out
+    _, listing, _ = run(capsys, "watch", "list")
+    assert "now €13.49" in listing and "lowest 30 days €13.49" in listing
+    assert len(aliexpress.verifier.calls) == 1
+
+
+def test_check_messages_once_when_a_cheaper_offer_appears(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+
+    aliexpress.offer("333", "11.90", "Shelly Plus 1PM EU warehouse stock")
+    _, second, _ = run(capsys, "check")
+    _, repeated, _ = run(capsys, "check")
+
+    assert second.startswith("TARGET REACHED #1: shelly plus 1pm is €11.90 (target €14.00")
+    assert "cheapest offer: Shelly Plus 1PM EU warehouse stock" in second
+    assert "/item/333.html" in second
+    assert repeated == ""
+
+
+def test_check_verifies_each_new_cheap_listing_once(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+    aliexpress.verifier.verdicts["222"] = False
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    assert len(aliexpress.verifier.calls) == 1
+
+    aliexpress.offer("444", "1.99", "Shelly Plus 1PM screwdriver bit")
+    aliexpress.verifier.verdicts["444"] = False
+    _, first, _ = run(capsys, "check")
+    _, repeated, _ = run(capsys, "check")
+
+    assert first == ""
+    assert repeated == ""
+    assert len(aliexpress.verifier.calls) == 2
+
+
+def test_watch_add_by_link_asks_the_model_for_the_product_name(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    title = "SONOFF ZBMINIR2 Extreme Zigbee Switch Detach Relay Mode"
+    aliexpress.offer("555", "12.90", title)
+    aliexpress.verifier.renames[title] = "SONOFF ZBMINIR2"
+
+    code, out, _ = run(capsys, "watch", "add", "https://www.aliexpress.com/item/555.html", "14")
+
+    assert code == 0
+    assert "Watching #1: SONOFF ZBMINIR2" in out
+    assert aliexpress.verifier.name_calls == [title]
+
+
+def test_check_reports_verifier_failure_once(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    aliexpress.offer("666", "4.99", "USB cable for Shelly")
+    aliexpress.verifier.error = "llm down"
+
+    _, first, _ = run(capsys, "check")
+    _, repeated, _ = run(capsys, "check")
+
+    assert first == "PRICE CHECK FAILED: llm down\n"
+    assert repeated == ""
+
+
+def test_check_without_verifier_still_watches_the_exact_listing(
+    aliexpress: FakeAliExpress,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module, "build_verifier", lambda: None)
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+
+    code, out, _ = run(capsys, "watch", "add", "111", "14")
+    assert code == 0
+    assert "now €13.49, target €14.00" in out
+
+    aliexpress.offer("111", "12.20")
+    _, finding, _ = run(capsys, "check")
+    assert finding.startswith("TARGET REACHED #1: Shelly Plus 1PM is €12.20")
+
+
+def test_check_without_verifier_skips_unverified_name_watches(
+    aliexpress: FakeAliExpress,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module, "build_verifier", lambda: None)
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    _, out, _ = run(capsys, "check")
+
+    assert out == ""
