@@ -14,6 +14,7 @@ Collection of self-hosted services orchestrated with Docker Compose. Each folder
 | [`media/`](./media) | Jellyfin + qBittorrent behind a Surfshark VPN (gluetun) + Prowlarr (+ FlareSolverr)/Sonarr/Radarr/Bazarr/Recyclarr automation, Seerr requests, Searcharr Telegram bot, Cleanuparr/Maintainerr cleanup, Exportarr metrics | http://localhost:8096 |
 | [`remote/`](./remote) | Self-hosted RustDesk (remote access server) + Cloudflare DDNS (keeps VPN and RustDesk DNS records in sync) | — |
 | [`vaultwarden/`](./vaultwarden) | Vaultwarden — self-hosted Bitwarden-compatible password manager | https://vault.<your-domain> (via Nginx Proxy Manager) |
+| [`calibre/`](./calibre) | Calibre-Web Automated — eBook library, watch folder ingestion, on-the-fly Kepub conversion, Kobo wireless sync | http://localhost:8083; https://books.<your-domain> (via Nginx Proxy Manager) |
 | [`home-automation/`](./home-automation) | Home Assistant + Zigbee2MQTT + Mosquitto (MQTT broker) | http://localhost:8123 |
 | [`backup/`](./backup) | Scheduled backups of service data + PostgreSQL, uploaded to Google Drive via rclone | — |
 | [`hermes/`](./hermes) | Hermes Agent — Telegram ops assistant (any LLM provider; free options in its README). Host install under a locked-down `hermes` user, not a compose stack | Telegram bot; optional web dashboard (LAN, via Nginx Proxy Manager) |
@@ -83,7 +84,7 @@ cp .env.example .env
 2. `postgres` — database for any service that needs it.
 3. `nginx` — reverse proxy to expose the rest.
 4. `monitoring` — observability and Docker management.
-5. `media` / `remote` / `home-automation` / `vaultwarden` — application stacks.
+5. `media` / `remote` / `home-automation` / `vaultwarden` / `calibre` — application stacks.
 6. `backup` — after the data stacks exist, so there is something to back up.
 7. `hermes` — last, once the stacks it manages exist.
 

@@ -12,6 +12,7 @@ Scheduled backups of the homelab data, uploaded to Google Drive with [`rclone`](
 | `jellyfin/config`     | **config only** (no media/cache); no `metadata` (re-downloadable artwork), `log`, `transcodes` |
 | `prowlarr`, `sonarr`, `radarr`, `bazarr`, `seerr`, `cleanuparr` config; `maintainerr`, `searcharr` data | config + DB (+ the *arrs' built-in `Backups/`); no `MediaCover`, `logs` |
 | `vaultwarden/data`    | attachments, sends, `rsa_key.pem` (no `icon_cache`); the vault itself is in PostgreSQL |
+| `calibre`             | `config` (`app.db`, Kobo sync state/shelves) + `library` (`metadata.db` and all books/covers); no `ingest`, `config/log_archive` |
 | PostgreSQL            | `pg_dumpall` — all databases + roles |
 
 Each run produces a dated folder (`YYYY-MM-DD_HHMMSS/`) with one `.tar.gz` per source, the Home Assistant database snapshot (`homeassistant-db.sqlite.gz`), a gzipped SQL dump, and a `SHA256SUMS` file for integrity checks.

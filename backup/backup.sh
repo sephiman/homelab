@@ -152,6 +152,11 @@ done
 run_step "Archiving vaultwarden data" \
   archive "${DEST}/vaultwarden.tar.gz" --exclude=./icon_cache -C /sources/vaultwarden .
 
+# Calibre-Web Automated: config (app.db, Kobo tokens/shelves) + library (metadata.db + books).
+# ingest is a transient watch folder.
+run_step "Archiving calibre" \
+  archive "${DEST}/calibre.tar.gz" --exclude=./ingest --exclude=./config/log_archive -C /sources/calibre .
+
 # 2. PostgreSQL dump (all databases + roles) -------------------------------
 run_step "Dumping PostgreSQL from ${POSTGRES_HOST}${PG_EXCLUDE_DATABASES:+ (excluding: ${PG_EXCLUDE_DATABASES})}" \
   dump_postgres

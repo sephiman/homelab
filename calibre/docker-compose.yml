@@ -1,0 +1,22 @@
+services:
+  calibre-web:
+    image: crocodilestick/calibre-web-automated:latest
+    container_name: calibre-web
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-Europe/Amsterdam}
+    volumes:
+      - ${HOME}/calibre/config:/config
+      - ${HOME}/calibre/library:/calibre-library
+      - ${HOME}/calibre/ingest:/cwa-book-ingest
+    ports:
+      - "8083:8083"
+    networks:
+      - my-network
+    restart: unless-stopped
+
+networks:
+  my-network:
+    external: true
+    name: all_dockers
