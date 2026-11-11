@@ -3,6 +3,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,6 +83,8 @@ class ListingVerifier:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._config.api_key}",
+                "User-Agent": "OpenAI/Python 1.99.1",
+                "x-opencode-session": f"price-hunt-{uuid.uuid4().hex}",
             },
             method="POST",
         )

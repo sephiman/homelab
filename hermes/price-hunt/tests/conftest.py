@@ -58,6 +58,7 @@ class FakeAliExpress:
     llm_reply: str = ""
     llm_requests: list[dict[str, object]] = field(default_factory=list)
     llm_auth: list[str] = field(default_factory=list)
+    llm_headers: list[dict[str, str]] = field(default_factory=list)
     verifier: FakeVerifier = field(default_factory=FakeVerifier)
     requests: list[dict[str, str]] = field(default_factory=list)
 
@@ -170,6 +171,7 @@ def _handler(fake: FakeAliExpress) -> type[BaseHTTPRequestHandler]:
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
             fake.llm_requests.append(json.loads(body))
             fake.llm_auth.append(self.headers.get("Authorization") or "")
+            fake.llm_headers.append({k.lower(): v for k, v in self.headers.items()})
             payload = json.dumps({"choices": [{"message": {"content": fake.llm_reply}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

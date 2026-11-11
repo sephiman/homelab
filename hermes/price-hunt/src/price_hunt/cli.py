@@ -26,6 +26,10 @@ def build_verifier() -> ListingVerifier | None:
     return ListingVerifier(config) if config is not None else None
 
 
+def now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
 def _product_line(product: Product) -> str:
     parts = [format_euros(product.price_cents)]
     if product.original_price_cents and product.original_price_cents > product.price_cents:
@@ -103,6 +107,8 @@ def _watch_add(args: argparse.Namespace) -> int:
         f"now {now_text}, target {format_euros(target)}, checked hourly\n"
         f"{watch.url}"
     )
+    if outcome.verifier_error is not None:
+        print(f"First check had a warning ({outcome.verifier_error}); the hourly job will retry.")
     if outcome.cheapest_cents is not None:
         print("It is already at or below the target.")
     return 0
@@ -161,17 +167,26 @@ def _check(_: argparse.Namespace) -> int:
     """Prints only what changed, so the cron job stays silent (and skips the model) on a quiet run."""
     settings = load_settings()
     store = WatchStore(settings.db_path)
+    now = now_utc()
     try:
-        findings = check_watches(store, AliExpressClient(settings), build_verifier(), datetime.now(UTC))
+        findings, verifier_error = check_watches(store, AliExpressClient(settings), build_verifier(), now)
     except PriceHuntError as error:
-        # Reported once per distinct error, not every run while the API or model stays down.
-        if store.last_error() != str(error):
+        # Re-reported once every 24h if it stays broken; silent in between so it doesn't spam.
+        if store.should_report_error(str(error), now):
             print(f"PRICE CHECK FAILED: {error}")
-            store.set_last_error(str(error))
+            store.set_last_error(str(error), now)
         return 0
-    store.set_last_error(None)
+
     for finding in findings:
         print(_finding_text(finding))
+
+    if verifier_error is not None:
+        if store.should_report_error(str(verifier_error), now):
+            print(f"PRICE CHECK FAILED: {verifier_error}")
+            store.set_last_error(str(verifier_error), now)
+        return 0
+
+    store.clear_last_error()
     return 0
 
 

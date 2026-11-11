@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 _SCHEMA = """
@@ -24,8 +24,9 @@ CREATE TABLE IF NOT EXISTS price_points (
 );
 CREATE INDEX IF NOT EXISTS price_points_by_watch ON price_points (watch_id, checked_at);
 CREATE TABLE IF NOT EXISTS check_status (
-    id         INTEGER PRIMARY KEY CHECK (id = 1),
-    last_error TEXT
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    last_error  TEXT,
+    reported_at TEXT
 );
 CREATE TABLE IF NOT EXISTS watch_candidates (
     watch_id   INTEGER NOT NULL REFERENCES watches (id) ON DELETE CASCADE,
@@ -63,6 +64,9 @@ class WatchStore:
             columns = {row[1] for row in db.execute("PRAGMA table_info(watches)")}
             if "last_notified_cents" not in columns:
                 db.execute("ALTER TABLE watches ADD COLUMN last_notified_cents INTEGER")
+            status_cols = {row[1] for row in db.execute("PRAGMA table_info(check_status)")}
+            if "reported_at" not in status_cols:
+                db.execute("ALTER TABLE check_status ADD COLUMN reported_at TEXT")
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -139,15 +143,29 @@ class WatchStore:
                 [(watch_id, product_id, is_match) for product_id, is_match in verdicts.items()],
             )
 
+    def should_report_error(self, error: str, now: datetime) -> bool:
+        with self._connection() as db:
+            row = db.execute("SELECT last_error, reported_at FROM check_status WHERE id = 1").fetchone()
+        if not row or row[0] != error or not row[1]:
+            return True
+        reported_at = datetime.fromisoformat(row[1])
+        return (now - reported_at) >= timedelta(hours=24)
+
     def last_error(self) -> str | None:
         with self._connection() as db:
             row = db.execute("SELECT last_error FROM check_status WHERE id = 1").fetchone()
         return row[0] if row else None
 
-    def set_last_error(self, error: str | None) -> None:
+    def set_last_error(self, error: str | None, now: datetime | None = None) -> None:
+        reported_at = now.isoformat() if now is not None else None
         with self._connection() as db:
             db.execute(
-                "INSERT INTO check_status (id, last_error) VALUES (1, ?) "
-                "ON CONFLICT (id) DO UPDATE SET last_error = excluded.last_error",
-                (error,),
+                "INSERT INTO check_status (id, last_error, reported_at) VALUES (1, ?, ?) "
+                "ON CONFLICT (id) DO UPDATE SET "
+                "last_error = excluded.last_error, reported_at = excluded.reported_at",
+                (error, reported_at),
             )
+
+    def clear_last_error(self) -> None:
+        with self._connection() as db:
+            db.execute("DELETE FROM check_status WHERE id = 1")

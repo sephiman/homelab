@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from conftest import FakeAliExpress
 
@@ -259,6 +261,58 @@ def test_check_reports_verifier_failure_once(
 
     assert first == "PRICE CHECK FAILED: llm down\n"
     assert repeated == ""
+
+
+def test_check_records_own_price_and_checks_all_watches_when_verifier_fails(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "447.46", "Gaming Console")
+    run(capsys, "watch", "add", "111", "360")
+
+    # A cheap accessory appears below target, tripping the verifier.
+    aliexpress.offer("222", "15.00", "Controller grips for console")
+    aliexpress.verifier.error = "llm 403"
+
+    # Add a second watch that will reach its target during check.
+    aliexpress.offer("333", "15.00", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "333", "14")
+
+    # Update 111's price, and drop 333 below its target.
+    aliexpress.offer("111", "445.00", "Gaming Console")
+    aliexpress.offer("333", "12.00")
+    code, out, _ = run(capsys, "check")
+
+    assert code == 0
+    assert "TARGET REACHED #2: Shelly Plus 1PM is €12.00" in out
+    assert "PRICE CHECK FAILED: llm 403" in out
+
+    # Watch #1 must have recorded the updated price despite the verifier error.
+    _, listing, _ = run(capsys, "watch", "list")
+    assert "#1 Gaming Console\n   now €445.00" in listing
+
+
+def test_check_rereports_persistent_error_after_24_hours(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    aliexpress.offer("666", "4.99", "USB cable for Shelly")
+    aliexpress.verifier.error = "llm down"
+
+    base_time = datetime(2026, 11, 11, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(cli_module, "now_utc", lambda: base_time)
+    _, first, _ = run(capsys, "check")
+    assert first == "PRICE CHECK FAILED: llm down\n"
+
+    # 1 hour later: silenced to avoid spam
+    monkeypatch.setattr(cli_module, "now_utc", lambda: base_time + timedelta(hours=1))
+    _, second, _ = run(capsys, "check")
+    assert second == ""
+
+    # 25 hours later: re-reported so persistent failure is not invisible
+    monkeypatch.setattr(cli_module, "now_utc", lambda: base_time + timedelta(hours=25))
+    _, third, _ = run(capsys, "check")
+    assert third == "PRICE CHECK FAILED: llm down\n"
 
 
 def test_check_without_verifier_still_watches_the_exact_listing(
