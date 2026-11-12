@@ -175,22 +175,16 @@ def _check(_: argparse.Namespace) -> int:
     settings = load_settings()
     store = WatchStore(settings.db_path)
     now = now_utc()
-    try:
-        findings, verifier_error = check_watches(store, AliExpressClient(settings), build_verifier(), now)
-    except PriceHuntError as error:
-        # Re-reported once every 24h if it stays broken; silent in between so it doesn't spam.
-        if store.should_report_error(str(error), now):
-            print(f"PRICE CHECK FAILED: {error}")
-            store.set_last_error(str(error), now)
-        return 0
+    findings, check_error = check_watches(store, AliExpressClient(settings), build_verifier(), now)
 
     for finding in findings:
         print(_finding_text(finding))
 
-    if verifier_error is not None:
-        if store.should_report_error(str(verifier_error), now):
-            print(f"PRICE CHECK FAILED: {verifier_error}")
-            store.set_last_error(str(verifier_error), now)
+    if check_error is not None:
+        # Re-reported once every 24h if it stays broken; silent in between so it doesn't spam.
+        if store.should_report_error(str(check_error), now):
+            print(f"PRICE CHECK FAILED: {check_error}")
+            store.set_last_error(str(check_error), now)
         return 0
 
     store.clear_last_error()

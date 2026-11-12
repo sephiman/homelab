@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from price_hunt.aliexpress import AliExpressClient
-from price_hunt.errors import VerifierError
+from price_hunt.errors import PriceHuntError, VerifierError
 from price_hunt.llm import ListingVerifier
 from price_hunt.watches import Watch, WatchStore
 
@@ -37,13 +37,18 @@ class WatchOutcome:
 
 def check_watches(
     store: WatchStore, client: AliExpressClient, verifier: ListingVerifier | None, now: datetime
-) -> tuple[list[Finding], VerifierError | None]:
+) -> tuple[list[Finding], PriceHuntError | None]:
     findings: list[Finding] = []
-    first_error: VerifierError | None = None
+    first_error: PriceHuntError | None = None
     for index, watch in enumerate(store.all()):
         if index:
             client.pace()
-        outcome = check_watch(store, client, verifier, watch, now)
+        try:
+            outcome = check_watch(store, client, verifier, watch, now)
+        except PriceHuntError as error:
+            if first_error is None:
+                first_error = error
+            continue
         findings.extend(outcome.findings)
         if outcome.verifier_error is not None and first_error is None:
             first_error = outcome.verifier_error

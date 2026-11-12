@@ -4,7 +4,9 @@ import pytest
 from conftest import FakeAliExpress
 
 import price_hunt.cli as cli_module
+from price_hunt.aliexpress import AliExpressClient, Product
 from price_hunt.cli import main
+from price_hunt.errors import PriceHuntError
 
 
 def run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str, str]:
@@ -398,3 +400,33 @@ def test_check_reports_lower_price_for_name_watch_from_another_seller_above_targ
     assert "cheapest offer: Shelly Plus 1PM EU warehouse stock" in lowered
     assert "/item/333.html" in lowered
     assert repeated == ""
+
+
+def test_check_reports_earlier_findings_when_another_watch_fails_search(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "111", "14")
+    aliexpress.offer("222", "40.00", "Zigbee Hub")
+    run(capsys, "watch", "add", "222", "30")
+
+    aliexpress.offer("111", "13.00", "Shelly Plus 1PM")
+    original_search = AliExpressClient.search
+
+    def flaky_search(
+        self: AliExpressClient,
+        keywords: str,
+        max_price_cents: int | None = None,
+        page_size: int = 20,
+    ) -> list[Product]:
+        if "Zigbee" in keywords:
+            raise PriceHuntError("blocked by AliExpress anti-bot protection")
+        return original_search(self, keywords, max_price_cents, page_size)
+
+    monkeypatch.setattr(AliExpressClient, "search", flaky_search)
+
+    code, out, _ = run(capsys, "check")
+
+    assert code == 0
+    assert "TARGET REACHED #1: Shelly Plus 1PM is €13.00" in out
+    assert "PRICE CHECK FAILED: blocked by AliExpress anti-bot protection" in out
