@@ -242,7 +242,7 @@ wrapper) so the model gets one prompt and **no tools**:
 | Morning summary (`daily-report.sh`) | daily | 1 per day |
 | Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
-| Price watch (`price-watch.sh`) | hourly | only when a watch reaches its target or a product disappears |
+| Price watch (`price-watch.sh`) | hourly | only when a watch reaches its target, hits a new low, or a product disappears |
 
 The alert watcher sends a diagnosis next to Alertmanager's own message: which container, its
 state and recent logs, errors across projects, and backup/media/Home Assistant/host details when
@@ -293,9 +293,9 @@ cheaper" — or for an alert — "tell me when it drops below €14". The `price
 
 Watches match listings with the help of the model (the same one Hermes chats with, read from
 its managed config): each hourly check searches the product's name, and the model classifies
-new listings at or below the target as the product or as accessories/variants — verdicts are
-cached in `prices.db`, so a quiet hour makes no model call. Alerts fire when the cheapest
-verified offer reaches the target or undercuts the last notified price. Prices may leave out
+new listings as the product or as accessories/variants — verdicts are cached in `prices.db`, so
+a quiet hour makes no model call. Alerts fire when the cheapest verified offer reaches the
+target, undercuts the last notified price, or sets a new 30-day low even while above the target. Prices may leave out
 shipping, and unverified cheap results are often a variant or an accessory; the skill tells
 Hermes to filter those and say so.
 

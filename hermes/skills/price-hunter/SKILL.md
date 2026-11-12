@@ -34,9 +34,10 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
 
 - **AliExpress:** `price-hunt watch add "<product name>" <euros>` watches the **cheapest offer
   across all sellers**, not one listing: every hourly check runs the search and a model call
-  classifies new cheap listings as the product or as accessories/variants (the verdict is
+  classifies new listings as the product or as accessories/variants (the verdict is
   cached, so quiet hours cost nothing). It messages the user when the cheapest verified offer
-  reaches the target or sets a new low, once per price. `watch add <link or id> <euros>` starts
+  reaches the target or drops to a new 30-day low (even while above the target), once per price.
+  `watch add <link or id> <euros>` starts
   from a specific listing: the model extracts the clean product name from its title, and
   cheaper verified offers from other sellers alert too. One scheduled job (`price-watch`,
   hourly) checks every watch. Never create a cron job for an alert: the existing job covers

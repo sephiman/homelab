@@ -13,6 +13,7 @@ _MAX_QUERY_WORDS = 12
 
 class FindingKind(Enum):
     TARGET_REACHED = "target reached"
+    LOWER_PRICE = "lower price"
     UNAVAILABLE = "unavailable"
 
 
@@ -52,7 +53,7 @@ def check_watches(
 def check_watch(
     store: WatchStore, client: AliExpressClient, verifier: ListingVerifier | None, watch: Watch, now: datetime
 ) -> WatchOutcome:
-    """One search per watch; the model classifies each new listing at or below the target once."""
+    """One search per watch; the model classifies each new listing once and caches the verdict."""
     words = watch.title.split()
     results = client.search(" ".join(words[:_MAX_QUERY_WORDS]), page_size=60) if words else []
     if not results:
@@ -61,12 +62,10 @@ def check_watch(
         return WatchOutcome((finding,) if finding else (), None, None)
 
     own = next((p for p in results if p.product_id == watch.product_id), None) if watch.product_id else None
-    if own is not None:
-        store.record_price(watch.id, own.price_cents, now)
+    previous_lowest = store.price_summary(watch.id, now - LOWEST_PRICE_WINDOW).lowest_cents
 
-    relevant = [p for p in results if p.price_cents <= watch.target_cents]
     known = store.verdicts(watch.id)
-    uncached = [p for p in relevant if p.product_id not in known]
+    uncached = [p for p in results if p.product_id not in known]
     verifier_error: VerifierError | None = None
     if uncached and verifier is not None:
         try:
@@ -76,28 +75,50 @@ def check_watch(
             known.update(fresh)
         except VerifierError as error:
             verifier_error = error
-    matched = [p for p in relevant if known.get(p.product_id) is True]
+    matched = [p for p in results if known.get(p.product_id) is True]
 
     cheapest = min(matched, key=lambda p: p.price_cents) if matched else None
-    if own is None and cheapest is not None:
-        store.record_price(watch.id, cheapest.price_cents, now)
+    recorded_cents = cheapest.price_cents if cheapest is not None else (own.price_cents if own else None)
+    if recorded_cents is not None:
+        store.record_price(watch.id, recorded_cents, now)
 
+    own_cents = own.price_cents if own else None
     if cheapest is None:
         if verifier_error is None:
-            # Nothing verified at or below the target: re-arm until a matching offer returns.
+            # Nothing verified matched: re-arm until a matching offer returns.
             store.update_state(watch.id, False, True)
-        return WatchOutcome((), None, own.price_cents if own else None, verifier_error)
+        return WatchOutcome((), None, own_cents, verifier_error)
 
-    store.update_state(watch.id, True, True)
-    if (
-        watch.notified
-        and watch.last_notified_cents is not None
-        and cheapest.price_cents >= watch.last_notified_cents
-    ):
-        return WatchOutcome((), cheapest.price_cents, own.price_cents if own else None, verifier_error)
-    store.set_last_notified(watch.id, cheapest.price_cents)
-    lowest = store.price_summary(watch.id, now - LOWEST_PRICE_WINDOW).lowest_cents
-    finding = Finding(
-        FindingKind.TARGET_REACHED, watch, cheapest.price_cents, lowest, cheapest.url, cheapest.title
-    )
-    return WatchOutcome((finding,), cheapest.price_cents, own.price_cents if own else None, verifier_error)
+    if cheapest.price_cents <= watch.target_cents:
+        store.update_state(watch.id, True, True)
+        if (
+            watch.notified
+            and watch.last_notified_cents is not None
+            and cheapest.price_cents >= watch.last_notified_cents
+        ):
+            return WatchOutcome((), cheapest.price_cents, own_cents, verifier_error)
+        store.set_last_notified(watch.id, cheapest.price_cents)
+        lowest = (
+            min(previous_lowest, cheapest.price_cents)
+            if previous_lowest is not None
+            else cheapest.price_cents
+        )
+        finding = Finding(
+            FindingKind.TARGET_REACHED, watch, cheapest.price_cents, lowest, cheapest.url, cheapest.title
+        )
+        return WatchOutcome((finding,), cheapest.price_cents, own_cents, verifier_error)
+
+    store.update_state(watch.id, False, True)
+    if previous_lowest is not None and cheapest.price_cents < previous_lowest:
+        store.set_last_notified(watch.id, cheapest.price_cents)
+        finding = Finding(
+            FindingKind.LOWER_PRICE,
+            watch,
+            cheapest.price_cents,
+            previous_lowest,
+            cheapest.url,
+            cheapest.title,
+        )
+        return WatchOutcome((finding,), cheapest.price_cents, own_cents, verifier_error)
+
+    return WatchOutcome((), cheapest.price_cents, own_cents, verifier_error)

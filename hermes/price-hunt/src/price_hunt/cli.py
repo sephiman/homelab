@@ -109,7 +109,7 @@ def _watch_add(args: argparse.Namespace) -> int:
     )
     if outcome.verifier_error is not None:
         print(f"First check had a warning ({outcome.verifier_error}); the hourly job will retry.")
-    if outcome.cheapest_cents is not None:
+    if outcome.cheapest_cents is not None and outcome.cheapest_cents <= target:
         print("It is already at or below the target.")
     return 0
 
@@ -153,11 +153,18 @@ def _finding_text(finding: Finding) -> str:
             f"(removed, sold out or not shipping here)\n{watch.url}"
         )
     assert finding.price_cents is not None
-    lowest = f"; lowest in 30 days {format_euros(finding.lowest_cents)}" if finding.lowest_cents else ""
-    text = (
-        f"TARGET REACHED #{watch.id}: {watch.title} is {format_euros(finding.price_cents)} "
-        f"(target {format_euros(watch.target_cents)}{lowest})"
-    )
+    if finding.kind is FindingKind.LOWER_PRICE:
+        previous = f"previous low {format_euros(finding.lowest_cents)}, " if finding.lowest_cents else ""
+        text = (
+            f"LOWER PRICE #{watch.id}: {watch.title} is {format_euros(finding.price_cents)} "
+            f"({previous}target {format_euros(watch.target_cents)})"
+        )
+    else:
+        lowest = f"; lowest in 30 days {format_euros(finding.lowest_cents)}" if finding.lowest_cents else ""
+        text = (
+            f"TARGET REACHED #{watch.id}: {watch.title} is {format_euros(finding.price_cents)} "
+            f"(target {format_euros(watch.target_cents)}{lowest})"
+        )
     if finding.offer_url and finding.offer_url != watch.url:
         return f"{text}\ncheapest offer: {finding.offer_title}\n{finding.offer_url}"
     return f"{text}\n{watch.url}"

@@ -344,3 +344,57 @@ def test_check_without_verifier_skips_unverified_name_watches(
     _, out, _ = run(capsys, "check")
 
     assert out == ""
+
+
+def test_check_reports_lower_price_above_target_once_and_ignores_higher_bounces(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "447.46", "Gaming Console")
+    _, added, _ = run(capsys, "watch", "add", "111", "360")
+    assert "already at or below" not in added
+
+    _, initial, _ = run(capsys, "check")
+    assert initial == ""
+
+    aliexpress.offer("111", "410.00", "Gaming Console")
+    _, lowered, _ = run(capsys, "check")
+    _, repeated, _ = run(capsys, "check")
+
+    assert lowered.startswith(
+        "LOWER PRICE #1: Gaming Console is €410.00 (previous low €447.46, target €360.00)"
+    )
+    assert repeated == ""
+
+    aliexpress.offer("111", "430.00", "Gaming Console")
+    assert run(capsys, "check")[1] == ""
+    aliexpress.offer("111", "420.00", "Gaming Console")
+    assert run(capsys, "check")[1] == ""
+
+    aliexpress.offer("111", "350.00", "Gaming Console")
+    _, reached, _ = run(capsys, "check")
+    assert reached.startswith(
+        "TARGET REACHED #1: Gaming Console is €350.00 (target €360.00; lowest in 30 days €350.00)"
+    )
+
+
+def test_check_reports_lower_price_for_name_watch_from_another_seller_above_target(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "18.00", "Shelly Plus 1PM")
+    aliexpress.offer("222", "2.10", "Wall bracket mount for Shelly")
+    aliexpress.verifier.verdicts["222"] = False
+
+    _, added, _ = run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    assert "now €18.00 (cheapest verified), target €14.00" in added
+    assert "already at or below" not in added
+
+    aliexpress.offer("333", "16.50", "Shelly Plus 1PM EU warehouse stock")
+    _, lowered, _ = run(capsys, "check")
+    _, repeated, _ = run(capsys, "check")
+
+    assert lowered.startswith(
+        "LOWER PRICE #1: shelly plus 1pm is €16.50 (previous low €18.00, target €14.00)"
+    )
+    assert "cheapest offer: Shelly Plus 1PM EU warehouse stock" in lowered
+    assert "/item/333.html" in lowered
+    assert repeated == ""
