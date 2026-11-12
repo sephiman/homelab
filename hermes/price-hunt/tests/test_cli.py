@@ -29,6 +29,10 @@ def test_search_lists_offers_cheapest_first_with_amazon_links(
     assert out.index("€9.84") < out.index("€15.20")
     assert "1. [222] €9.84 (was €19.99) · ★ 4.9 · 1,234 sold" in out
     assert "https://www.amazon.nl/s?k=shelly+plus+1pm" in out
+    assert "https://www.amazon.de/s?k=shelly+plus+1pm" in out
+    assert "https://www.amazon.es/s?k=shelly+plus+1pm" in out
+    assert "https://www.amazon.fr/s?k=shelly+plus+1pm" in out
+    assert "https://www.amazon.it/s?k=shelly+plus+1pm" in out
     request = aliexpress.requests[0]
     assert request["kind"] == "search"
     assert request["slug"] == "shelly-plus-1pm"

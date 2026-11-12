@@ -17,7 +17,13 @@ SEARCH_FOOTNOTE = (
     "AliExpress prices are read from the public site for delivery to NL, in EUR; shipping and VAT "
     "may not be included, so confirm on the product page."
 )
-AMAZON_SEARCHES = (("Amazon.nl", "https://www.amazon.nl/s?k="), ("Amazon.de", "https://www.amazon.de/s?k="))
+AMAZON_SEARCHES = (
+    ("Amazon.nl", "https://www.amazon.nl/s?k="),
+    ("Amazon.de", "https://www.amazon.de/s?k="),
+    ("Amazon.es", "https://www.amazon.es/s?k="),
+    ("Amazon.fr", "https://www.amazon.fr/s?k="),
+    ("Amazon.it", "https://www.amazon.it/s?k="),
+)
 
 
 def build_verifier() -> ListingVerifier | None:

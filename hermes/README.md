@@ -284,13 +284,14 @@ Change the summary's language or contents by editing its prompt: `hermes cron ed
 ## Price hunting
 
 Ask in chat where something is cheapest, delivered to the Netherlands — "find a Shelly Plus 1PM
-cheaper" — or for an alert — "tell me when it drops below €14". The `price-hunter` skill drives
+cheaper" — send a photo of a product/model label on Telegram to price-check it against online
+offers, or ask for an alert — "tell me when it drops below €14". The `price-hunter` skill drives
 [`price-hunt`](./price-hunt):
 
 | Shop | Search | Price alerts |
 |------|--------|--------------|
 | AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add "<name>" <€>` or `<link> <€>`; the `price-watch` job checks hourly for the cheapest verified offer across sellers and messages you once per new low |
-| Amazon.nl / Amazon.de | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
+| Amazon EU (`.nl`, `.de`, `.es`, `.fr`, `.it`) | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
 
 Watches match listings with the help of the model (the same one Hermes chats with, read from
 its managed config): each hourly check searches the product's name, and the model classifies
