@@ -24,6 +24,12 @@ AMAZON_SEARCHES = (
     ("Amazon.fr", "https://www.amazon.fr/s?k="),
     ("Amazon.it", "https://www.amazon.it/s?k="),
 )
+EU_COMPARISON_SEARCHES = (
+    ("Tweakers Pricewatch", "https://tweakers.net/pricewatch/zoeken/?keyword="),
+    ("Idealo.nl", "https://www.idealo.nl/zoeken.html?q="),
+    ("Idealo.de", "https://www.idealo.de/preisvergleich/MainSearchProductCategory.html?q="),
+    ("Idealo.es", "https://www.idealo.es/resultados.html?q="),
+)
 
 
 def build_verifier() -> ListingVerifier | None:
@@ -62,8 +68,9 @@ def _search(args: argparse.Namespace) -> int:
             f"{number}. [{product.product_id}] {_product_line(product)}\n   {product.title}\n   {product.url}"
         )
     print(f"\n{SEARCH_FOOTNOTE}")
-    for name, base in AMAZON_SEARCHES:
-        print(f"{name} search: {base}{urllib.parse.quote_plus(keywords)}")
+    encoded = urllib.parse.quote_plus(keywords)
+    for name, base in AMAZON_SEARCHES + EU_COMPARISON_SEARCHES:
+        print(f"{name} search: {base}{encoded}")
     return 0
 
 

@@ -29,11 +29,12 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
    whose title matches the product asked for; say plainly when the cheapest one is a variant.
 3. Reply with at most 5 offers: price, what it is when it differs, rating and sales, and the link.
    Say that shipping and VAT may be extra (the tool prints this note) and that the page has the final price.
-4. For Amazon, give the Amazon EU search links (`Amazon.nl`, `Amazon.de`, `Amazon.es`,
-   `Amazon.fr`, `Amazon.it`) the tool printed — they often ship to both NL and Spain, and
-   another EU store is frequently cheaper. Don't fetch Amazon pages with curl: Amazon answers
-   scripts with captchas. If you have a browser tool, you may open the search links and report
-   the first matching offers with their price and delivery; if it shows a captcha, give the links.
+4. For Amazon and EU price-comparison sites, give the Amazon EU links (`Amazon.nl`, `Amazon.de`,
+   `Amazon.es`, `Amazon.fr`, `Amazon.it`) plus the `Tweakers Pricewatch` and `Idealo` (`.nl`,
+   `.de`, `.es`) links the tool printed — they often ship to both NL and Spain, and another EU
+   store is frequently cheaper. Don't fetch Amazon pages with curl: Amazon answers scripts with
+   captchas. If you have a browser tool, you may open the search links and report the first
+   matching offers with their price and delivery; if it shows a captcha, give the links.
 
 ## Photo-to-price-check (Telegram photo of a product or label)
 
