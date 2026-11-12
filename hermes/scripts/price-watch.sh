@@ -7,4 +7,6 @@ set -euo pipefail
 readonly MAX_OUTPUT_BYTES=30000
 
 output="$(/usr/local/bin/price-hunt check 2>&1)"
-[[ -n "$output" ]] && printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+if [[ -n "$output" ]]; then
+  printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+fi

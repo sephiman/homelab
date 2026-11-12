@@ -5,4 +5,6 @@ set -euo pipefail
 readonly MAX_OUTPUT_BYTES=30000
 
 output="$(sudo -n /usr/local/bin/homelab-manage.sh capacity-report 2>&1)"
-[[ -n "$output" ]] && printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+if [[ -n "$output" ]]; then
+  printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+fi

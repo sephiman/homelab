@@ -90,4 +90,6 @@ main() {
 }
 
 output="$(main)"
-[[ -n "$output" ]] && printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+if [[ -n "$output" ]]; then
+  printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
+fi
