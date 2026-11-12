@@ -5,4 +5,5 @@ set -euo pipefail
 
 readonly MAX_OUTPUT_BYTES=30000
 
-sudo -n /usr/local/bin/homelab-manage.sh daily-report 2>&1 | head -c "$MAX_OUTPUT_BYTES"
+output="$(sudo -n /usr/local/bin/homelab-manage.sh daily-report 2>&1)"
+[[ -n "$output" ]] && printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"

@@ -105,6 +105,7 @@ format_report() {
       n = split("crypto etf-stocks total", blocks, " ")
       for (i = 1; i <= n; i++) {
         b = blocks[i]
+        if (!(b in today)) continue
         change = today[b] - yesterday[b]
         pct = (yesterday[b] != 0) ? sprintf(" (%+.2f%%)", 100 * change / yesterday[b]) : ""
         printf "%s\ttoday %.2f\tyesterday %.2f\tchange %+.2f%s%s\n", b, today[b], yesterday[b], change, pct, (b == "etf-stocks") ? closes : ""

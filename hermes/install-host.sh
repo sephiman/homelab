@@ -54,7 +54,13 @@ keyed_provider() {
 }
 
 env_value() {
-  sed -n "s/^$1=//p" "$SCRIPT_DIR/.env"
+  local val
+  val="$(sed -n "s/^$1=//p" "$SCRIPT_DIR/.env" | head -n 1)"
+  val="${val#\"}"
+  val="${val%\"}"
+  val="${val#\'}"
+  val="${val%\'}"
+  printf '%s\n' "$val"
 }
 
 is_unset() {
@@ -143,7 +149,7 @@ EOF
 # switch devices, and the wrapper only ever reads with it.
 install_ha_token() {
   local token
-  token="$(sed -n 's/^HA_TOKEN=//p' "$SCRIPT_DIR/.env")"
+  token="$(env_value HA_TOKEN)"
   if [[ -z "$token" || "$token" == changeme ]]; then
     echo "HA_TOKEN not set: Home Assistant actions stay disabled"
     return 0

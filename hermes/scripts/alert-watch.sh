@@ -5,6 +5,7 @@ set -euo pipefail
 
 readonly STATE_DIR="${HERMES_HOME:-${HOME:-/home/hermes}/.hermes}/state"
 readonly SEEN_FILE="$STATE_DIR/alerts-seen"
+readonly PROM_ERR_FLAG="$STATE_DIR/alerts-prom-error"
 readonly MAX_OUTPUT_BYTES=30000
 
 manage() {
@@ -52,22 +53,20 @@ alert_specific_context() {
   esac
 }
 
-# Firing alerts as `alerts` prints them. If Prometheus can't be queried, that is reported as an alert
-# of its own (fixed start time, so once), rather than failing every run and waking the model each time.
-firing_alerts() {
-  local alerts
-  if ! alerts="$(manage alerts)"; then
-    printf 'firing\tAlertWatcherCannotQueryPrometheus\tcritical\t-\t%s\t\n' "$(head -n 1 <<<"$alerts")"
-    return 0
-  fi
-  awk -F'\t' '$1 == "firing"' <<<"$alerts"
-}
-
 main() {
-  local firing keys new line name labels container
+  local alerts firing keys new line name labels container
   mkdir -p "$STATE_DIR"
   touch "$SEEN_FILE"
-  firing="$(firing_alerts)"
+  if ! alerts="$(manage alerts)"; then
+    if [[ ! -f "$PROM_ERR_FLAG" ]]; then
+      touch "$PROM_ERR_FLAG"
+      section "new firing alerts (state, name, severity, active since, summary, labels)"
+      printf 'firing\tAlertWatcherCannotQueryPrometheus\tcritical\t-\t%s\t\n' "$(head -n 1 <<<"$alerts")"
+    fi
+    return 0
+  fi
+  rm -f "$PROM_ERR_FLAG"
+  firing="$(awk -F'\t' '$1 == "firing"' <<<"$alerts")"
   keys="$(alert_key <<<"$firing" | grep -v '^||$' || true)"
   new="$(grep -vxFf "$SEEN_FILE" <<<"$keys" || true)"
   # Only what fires now is remembered, so an alert that resolves and fires again is reported again.
@@ -90,4 +89,5 @@ main() {
   manage loki-errors "" 1 | tail -n 40
 }
 
-main | head -c "$MAX_OUTPUT_BYTES"
+output="$(main)"
+[[ -n "$output" ]] && printf '%s\n' "${output:0:$MAX_OUTPUT_BYTES}"
