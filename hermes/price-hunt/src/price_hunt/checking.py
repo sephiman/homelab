@@ -8,6 +8,7 @@ from price_hunt.llm import ListingVerifier
 from price_hunt.watches import Watch, WatchStore
 
 LOWEST_PRICE_WINDOW = timedelta(days=30)
+PRICE_RETENTION_WINDOW = timedelta(days=90)
 _MAX_QUERY_WORDS = 12
 
 
@@ -52,7 +53,17 @@ def check_watches(
         findings.extend(outcome.findings)
         if outcome.verifier_error is not None and first_error is None:
             first_error = outcome.verifier_error
+    store.prune_price_points(now - PRICE_RETENTION_WINDOW)
     return findings, first_error
+
+
+def _meets_min_drop(watch: Watch, previous_lowest: int, current_cents: int) -> bool:
+    drop = previous_lowest - current_cents
+    if drop <= 0:
+        return False
+    if watch.min_drop_cents is not None and drop < watch.min_drop_cents:
+        return False
+    return not (watch.min_drop_bps is not None and drop * 10_000 < previous_lowest * watch.min_drop_bps)
 
 
 def check_watch(
@@ -114,7 +125,17 @@ def check_watch(
         return WatchOutcome((finding,), cheapest.price_cents, own_cents, verifier_error)
 
     store.update_state(watch.id, False, True)
-    if previous_lowest is not None and cheapest.price_cents < previous_lowest:
+    if previous_lowest is None:
+        store.set_last_notified(watch.id, cheapest.price_cents)
+        return WatchOutcome((), cheapest.price_cents, own_cents, verifier_error)
+
+    has_min_drop = watch.min_drop_cents is not None or watch.min_drop_bps is not None
+    baseline = (
+        watch.last_notified_cents
+        if has_min_drop and watch.last_notified_cents is not None
+        else previous_lowest
+    )
+    if cheapest.price_cents < previous_lowest and _meets_min_drop(watch, baseline, cheapest.price_cents):
         store.set_last_notified(watch.id, cheapest.price_cents)
         finding = Finding(
             FindingKind.LOWER_PRICE,

@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS watches (
     created_at          TEXT    NOT NULL,
     notified            INTEGER NOT NULL DEFAULT 0,
     available           INTEGER NOT NULL DEFAULT 1,
-    last_notified_cents INTEGER
+    last_notified_cents INTEGER,
+    min_drop_cents      INTEGER,
+    min_drop_bps        INTEGER
 );
 CREATE TABLE IF NOT EXISTS price_points (
     watch_id    INTEGER NOT NULL REFERENCES watches (id) ON DELETE CASCADE,
@@ -47,12 +49,22 @@ class Watch:
     notified: bool
     available: bool
     last_notified_cents: int | None
+    min_drop_cents: int | None = None
+    min_drop_bps: int | None = None
 
 
 @dataclass(frozen=True)
 class PriceSummary:
     latest_cents: int | None
     lowest_cents: int | None
+
+
+@dataclass(frozen=True)
+class PriceStats:
+    count: int
+    latest_cents: int | None
+    lowest_cents: int | None
+    highest_cents: int | None
 
 
 class WatchStore:
@@ -64,6 +76,10 @@ class WatchStore:
             columns = {row[1] for row in db.execute("PRAGMA table_info(watches)")}
             if "last_notified_cents" not in columns:
                 db.execute("ALTER TABLE watches ADD COLUMN last_notified_cents INTEGER")
+            if "min_drop_cents" not in columns:
+                db.execute("ALTER TABLE watches ADD COLUMN min_drop_cents INTEGER")
+            if "min_drop_bps" not in columns:
+                db.execute("ALTER TABLE watches ADD COLUMN min_drop_bps INTEGER")
             status_cols = {row[1] for row in db.execute("PRAGMA table_info(check_status)")}
             if "reported_at" not in status_cols:
                 db.execute("ALTER TABLE check_status ADD COLUMN reported_at TEXT")
@@ -74,26 +90,99 @@ class WatchStore:
             db.execute("PRAGMA foreign_keys = ON")
             yield db
 
-    def add(self, product_id: str, title: str, url: str, target_cents: int, now: datetime) -> Watch:
+    def add(
+        self,
+        product_id: str,
+        title: str,
+        url: str,
+        target_cents: int,
+        now: datetime,
+        min_drop_cents: int | None = None,
+        min_drop_bps: int | None = None,
+    ) -> Watch:
         with self._connection() as db:
             cursor = db.execute(
-                "INSERT INTO watches (product_id, title, url, target_cents, created_at)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (product_id, title, url, target_cents, now.isoformat()),
+                "INSERT INTO watches (product_id, title, url, target_cents, created_at,"
+                " min_drop_cents, min_drop_bps) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (product_id, title, url, target_cents, now.isoformat(), min_drop_cents, min_drop_bps),
             )
             watch_id = cursor.lastrowid
         assert watch_id is not None
-        return Watch(watch_id, product_id, title, url, target_cents, False, True, None)
+        return Watch(
+            watch_id,
+            product_id,
+            title,
+            url,
+            target_cents,
+            False,
+            True,
+            None,
+            min_drop_cents,
+            min_drop_bps,
+        )
+
+    @staticmethod
+    def _row_to_watch(row: tuple[object, ...]) -> Watch:
+        assert isinstance(row[0], int)
+        assert isinstance(row[1], str)
+        assert isinstance(row[2], str)
+        assert isinstance(row[3], str)
+        assert isinstance(row[4], int)
+        assert row[7] is None or isinstance(row[7], int)
+        assert row[8] is None or isinstance(row[8], int)
+        assert row[9] is None or isinstance(row[9], int)
+        return Watch(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            bool(row[5]),
+            bool(row[6]),
+            row[7],
+            row[8],
+            row[9],
+        )
 
     def all(self) -> list[Watch]:
         with self._connection() as db:
             rows = db.execute(
                 "SELECT id, product_id, title, url, target_cents, notified, available,"
-                " last_notified_cents FROM watches ORDER BY id"
+                " last_notified_cents, min_drop_cents, min_drop_bps FROM watches ORDER BY id"
             ).fetchall()
-        return [
-            Watch(row[0], row[1], row[2], row[3], row[4], bool(row[5]), bool(row[6]), row[7]) for row in rows
-        ]
+        return [self._row_to_watch(row) for row in rows]
+
+    def get(self, watch_id: int) -> Watch | None:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT id, product_id, title, url, target_cents, notified, available,"
+                " last_notified_cents, min_drop_cents, min_drop_bps FROM watches WHERE id = ?",
+                (watch_id,),
+            ).fetchone()
+        return self._row_to_watch(row) if row else None
+
+    def update_target(
+        self,
+        watch_id: int,
+        target_cents: int,
+        min_drop_cents: int | None = None,
+        min_drop_bps: int | None = None,
+        update_min_drop: bool = False,
+    ) -> Watch | None:
+        with self._connection() as db:
+            if update_min_drop:
+                db.execute(
+                    "UPDATE watches SET target_cents = ?, min_drop_cents = ?, min_drop_bps = ?,"
+                    " notified = 0, last_notified_cents = NULL WHERE id = ?",
+                    (target_cents, min_drop_cents, min_drop_bps, watch_id),
+                )
+            else:
+                db.execute(
+                    "UPDATE watches SET target_cents = ?, notified = 0, last_notified_cents = NULL"
+                    " WHERE id = ?",
+                    (target_cents, watch_id),
+                )
+        return self.get(watch_id)
 
     def remove(self, watch_id: int) -> bool:
         with self._connection() as db:
@@ -127,6 +216,37 @@ class WatchStore:
                 (watch_id, since.isoformat()),
             ).fetchone()
         return PriceSummary(latest[0] if latest else None, lowest[0] if lowest else None)
+
+    def price_stats(self, watch_id: int, since: datetime) -> PriceStats:
+        with self._connection() as db:
+            latest = db.execute(
+                "SELECT price_cents FROM price_points WHERE watch_id = ? ORDER BY checked_at DESC LIMIT 1",
+                (watch_id,),
+            ).fetchone()
+            agg = db.execute(
+                "SELECT count(*), min(price_cents), max(price_cents) FROM price_points"
+                " WHERE watch_id = ? AND checked_at >= ?",
+                (watch_id, since.isoformat()),
+            ).fetchone()
+        return PriceStats(
+            agg[0] if agg else 0,
+            latest[0] if latest else None,
+            agg[1] if agg else None,
+            agg[2] if agg else None,
+        )
+
+    def price_history(self, watch_id: int, limit: int = 20) -> list[tuple[str, int]]:
+        with self._connection() as db:
+            rows = db.execute(
+                "SELECT checked_at, price_cents FROM price_points WHERE watch_id = ?"
+                " ORDER BY checked_at DESC LIMIT ?",
+                (watch_id, limit),
+            ).fetchall()
+        return [(row[0], row[1]) for row in rows]
+
+    def prune_price_points(self, before: datetime) -> int:
+        with self._connection() as db:
+            return db.execute("DELETE FROM price_points WHERE checked_at < ?", (before.isoformat(),)).rowcount
 
     def verdicts(self, watch_id: int) -> dict[str, bool]:
         with self._connection() as db:

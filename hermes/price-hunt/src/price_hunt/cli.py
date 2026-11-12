@@ -5,11 +5,11 @@ import urllib.parse
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from price_hunt.aliexpress import AliExpressClient, Product, item_url, search_url
+from price_hunt.aliexpress import AliExpressClient, Product, item_url, product_id_in, search_url
 from price_hunt.checking import LOWEST_PRICE_WINDOW, Finding, FindingKind, check_watch, check_watches
 from price_hunt.errors import InvalidInputError, PriceHuntError, VerifierError
 from price_hunt.llm import ListingVerifier, load_llm_config
-from price_hunt.money import format_euros, parse_euros
+from price_hunt.money import format_euros, format_min_drop, parse_euros, parse_min_drop
 from price_hunt.settings import load_settings
 from price_hunt.watches import WatchStore
 
@@ -45,7 +45,10 @@ def _search(args: argparse.Namespace) -> int:
     keywords = " ".join(args.keywords)
     max_cents = parse_euros(args.max) if args.max else None
     client = AliExpressClient(load_settings())
-    products = sorted(client.search(keywords, max_cents), key=lambda product: product.price_cents)
+    products = sorted(
+        client.search(keywords, max_cents, sort=args.sort),
+        key=lambda product: product.price_cents,
+    )
     if not products:
         print(f"AliExpress: nothing found for {keywords!r} delivering to NL.")
     for number, product in enumerate(products[: args.limit], start=1):
@@ -60,6 +63,7 @@ def _search(args: argparse.Namespace) -> int:
 
 def _watch_add(args: argparse.Namespace) -> int:
     target = parse_euros(args.target)
+    min_drop_cents, min_drop_bps = parse_min_drop(args.min_drop) if args.min_drop else (None, None)
     settings = load_settings()
     client = AliExpressClient(settings)
     verifier = build_verifier()
@@ -80,10 +84,21 @@ def _watch_add(args: argparse.Namespace) -> int:
         if verifier is not None:
             with contextlib.suppress(VerifierError):
                 query = verifier.product_name(page_title)
-        watch = store.add(product_id, query or page_title, item_url(product_id), target, now)
+        watch = store.add(
+            product_id,
+            query or page_title,
+            item_url(product_id),
+            target,
+            now,
+            min_drop_cents,
+            min_drop_bps,
+        )
         store.save_verdicts(watch.id, {product_id: True})
     else:
-        watch = store.add("", reference, search_url(reference), target, now)
+        watch = store.add("", reference, search_url(reference), target, now, min_drop_cents, min_drop_bps)
+
+    drop_label = format_min_drop(min_drop_cents, min_drop_bps)
+    drop_suffix = f", min drop {drop_label}" if drop_label else ""
 
     try:
         outcome = check_watch(store, client, verifier, watch, now)
@@ -91,7 +106,7 @@ def _watch_add(args: argparse.Namespace) -> int:
         # The watch stays: the hourly job retries the failed first check.
         print(
             f"Watching #{watch.id}: {watch.title}\n"
-            f"now unknown, target {format_euros(target)}, checked hourly\n"
+            f"now unknown, target {format_euros(target)}{drop_suffix}, checked hourly\n"
             f"{watch.url}\n"
             f"First check failed ({error}); the hourly job will retry."
         )
@@ -104,7 +119,7 @@ def _watch_add(args: argparse.Namespace) -> int:
         now_text = "unknown"
     print(
         f"Watching #{watch.id}: {watch.title}\n"
-        f"now {now_text}, target {format_euros(target)}, checked hourly\n"
+        f"now {now_text}, target {format_euros(target)}{drop_suffix}, checked hourly\n"
         f"{watch.url}"
     )
     if outcome.verifier_error is not None:
@@ -124,6 +139,8 @@ def _watch_list(_: argparse.Namespace) -> int:
         summary = store.price_summary(watch.id, since)
         now = format_euros(summary.latest_cents) if summary.latest_cents is not None else "unknown"
         lowest = format_euros(summary.lowest_cents) if summary.lowest_cents is not None else "unknown"
+        drop_label = format_min_drop(watch.min_drop_cents, watch.min_drop_bps)
+        drop_text = f", min drop {drop_label}" if drop_label else ""
         flags = "".join(
             [
                 " [target reached, notified]" if watch.notified else "",
@@ -131,9 +148,77 @@ def _watch_list(_: argparse.Namespace) -> int:
             ]
         )
         print(
-            f"#{watch.id} {watch.title}\n   now {now}, target {format_euros(watch.target_cents)}, "
+            f"#{watch.id} {watch.title}\n   now {now}, target {format_euros(watch.target_cents)}{drop_text}, "
             f"lowest 30 days {lowest}{flags}\n   {watch.url}"
         )
+    return 0
+
+
+def _watch_target(args: argparse.Namespace) -> int:
+    store = WatchStore(load_settings().db_path)
+    existing = store.get(args.id)
+    if existing is None:
+        raise InvalidInputError(f"no watch #{args.id}")
+    new_target = parse_euros(args.target)
+    update_min_drop = args.min_drop is not None
+    min_drop_cents, min_drop_bps = (
+        parse_min_drop(args.min_drop) if args.min_drop is not None else (None, None)
+    )
+    updated = store.update_target(args.id, new_target, min_drop_cents, min_drop_bps, update_min_drop)
+    assert updated is not None
+    drop_label = format_min_drop(updated.min_drop_cents, updated.min_drop_bps)
+    drop_text = f", min drop {drop_label}" if drop_label else ""
+    print(
+        f"Updated watch #{updated.id}: {updated.title}\n"
+        f"target {format_euros(updated.target_cents)} (was {format_euros(existing.target_cents)})"
+        f"{drop_text}"
+    )
+    return 0
+
+
+def _watch_history(args: argparse.Namespace) -> int:
+    store = WatchStore(load_settings().db_path)
+    watch = store.get(args.id)
+    if watch is None:
+        raise InvalidInputError(f"no watch #{args.id}")
+    stats = store.price_stats(watch.id, now_utc() - LOWEST_PRICE_WINDOW)
+    latest = format_euros(stats.latest_cents) if stats.latest_cents is not None else "unknown"
+    lowest = format_euros(stats.lowest_cents) if stats.lowest_cents is not None else "unknown"
+    highest = format_euros(stats.highest_cents) if stats.highest_cents is not None else "unknown"
+    drop_label = format_min_drop(watch.min_drop_cents, watch.min_drop_bps)
+    drop_text = f", min drop {drop_label}" if drop_label else ""
+    print(
+        f"#{watch.id} {watch.title}\n"
+        f"   now {latest}, target {format_euros(watch.target_cents)}{drop_text}\n"
+        f"   30 days: lowest {lowest}, highest {highest} ({stats.count} checks)\n"
+        f"   {watch.url}"
+    )
+    points = store.price_history(watch.id, limit=args.limit)
+    if points:
+        print("Recent prices:")
+        for checked_at, price_cents in points:
+            print(f"   {checked_at[:16].replace('T', ' ')}  {format_euros(price_cents)}")
+    verdicts = store.verdicts(watch.id)
+    if verdicts:
+        matched_ids = sorted(pid for pid, ok in verdicts.items() if ok)
+        rejected_ids = sorted(pid for pid, ok in verdicts.items() if not ok)
+        if matched_ids:
+            print(f"Matched listings ({len(matched_ids)}): {', '.join(matched_ids)}")
+        if rejected_ids:
+            print(f"Rejected listings ({len(rejected_ids)}): {', '.join(rejected_ids)}")
+    return 0
+
+
+def _watch_reject(args: argparse.Namespace) -> int:
+    store = WatchStore(load_settings().db_path)
+    watch = store.get(args.id)
+    if watch is None:
+        raise InvalidInputError(f"no watch #{args.id}")
+    product_id = product_id_in(args.product)
+    if product_id is None:
+        raise InvalidInputError(f"not an AliExpress product id or link: {args.product!r}")
+    store.save_verdicts(watch.id, {product_id: False})
+    print(f"Rejected listing {product_id} for watch #{watch.id}.")
     return 0
 
 
@@ -201,6 +286,7 @@ def _parser() -> argparse.ArgumentParser:
     search.add_argument("keywords", nargs="+")
     search.add_argument("--max", help="maximum price in euros")
     search.add_argument("--limit", type=int, default=10)
+    search.add_argument("--sort", choices=("best", "price"), default="best", help="AliExpress sort order")
     search.set_defaults(run=_search)
 
     watch = commands.add_parser("watch", help="price-drop watches").add_subparsers(required=True)
@@ -209,8 +295,30 @@ def _parser() -> argparse.ArgumentParser:
     )
     add.add_argument("product", help="product name, AliExpress product link or id")
     add.add_argument("target", help="target price in euros")
+    add.add_argument(
+        "--min-drop",
+        dest="min_drop",
+        help="minimum drop for new-low alerts above target (e.g. '5', '2.50', or '5%%')",
+    )
     add.set_defaults(run=_watch_add)
     watch.add_parser("list").set_defaults(run=_watch_list)
+    target_cmd = watch.add_parser("target", help="update target price without losing history")
+    target_cmd.add_argument("id", type=lambda text: int(text.lstrip("#")))
+    target_cmd.add_argument("target", help="new target price in euros")
+    target_cmd.add_argument(
+        "--min-drop",
+        dest="min_drop",
+        help="update minimum drop for new-low alerts ('5', '5%%', or 'none')",
+    )
+    target_cmd.set_defaults(run=_watch_target)
+    history = watch.add_parser("history", help="show 30-day price history and verified listings")
+    history.add_argument("id", type=lambda text: int(text.lstrip("#")))
+    history.add_argument("--limit", type=int, default=15)
+    history.set_defaults(run=_watch_history)
+    reject = watch.add_parser("reject", help="mark a listing as not matching this watch")
+    reject.add_argument("id", type=lambda text: int(text.lstrip("#")))
+    reject.add_argument("product", help="AliExpress product id or link")
+    reject.set_defaults(run=_watch_reject)
     remove = watch.add_parser("rm", help="stop watching")
     remove.add_argument("id", type=lambda text: int(text.lstrip("#")))
     remove.set_defaults(run=_watch_remove)

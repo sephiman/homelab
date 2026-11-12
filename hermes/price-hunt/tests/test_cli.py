@@ -7,6 +7,8 @@ import price_hunt.cli as cli_module
 from price_hunt.aliexpress import AliExpressClient, Product
 from price_hunt.cli import main
 from price_hunt.errors import PriceHuntError
+from price_hunt.settings import load_settings
+from price_hunt.watches import WatchStore
 
 
 def run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str, str]:
@@ -430,3 +432,113 @@ def test_check_reports_earlier_findings_when_another_watch_fails_search(
     assert code == 0
     assert "TARGET REACHED #1: Shelly Plus 1PM is €13.00" in out
     assert "PRICE CHECK FAILED: blocked by AliExpress anti-bot protection" in out
+
+
+def test_search_sort_price_sends_sort_type_price_asc(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+
+    code, _, _ = run(capsys, "search", "shelly", "--sort", "price")
+
+    assert code == 0
+    assert aliexpress.requests[0]["SortType"] == "price_asc"
+
+
+def test_watch_target_updates_target_without_losing_history(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "111", "14")
+
+    code, out, _ = run(capsys, "watch", "target", "#1", "16", "--min-drop", "5%")
+
+    assert code == 0
+    assert "Updated watch #1: Shelly Plus 1PM\ntarget €16.00 (was €14.00), min drop 5%" in out
+    _, reached, _ = run(capsys, "check")
+    assert reached.startswith("TARGET REACHED #1: Shelly Plus 1PM is €15.20 (target €16.00")
+
+
+def test_watch_history_shows_stats_recent_prices_and_verdicts(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    aliexpress.offer("222", "2.10", "Shelly mount bracket")
+    aliexpress.verifier.verdicts["222"] = False
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+    aliexpress.offer("111", "14.50", "Shelly Plus 1PM")
+    run(capsys, "check")
+
+    code, out, _ = run(capsys, "watch", "history", "#1")
+
+    assert code == 0
+    assert "30 days: lowest €14.50, highest €15.20 (2 checks)" in out
+    assert "Recent prices:" in out
+    assert "€14.50" in out
+    assert "Matched listings (1): 111" in out
+    assert "Rejected listings (1): 222" in out
+
+
+def test_watch_min_drop_euros_and_percent_gate_lower_price_alerts(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "100.00", "Gaming Console")
+    code, added, _ = run(capsys, "watch", "add", "111", "70", "--min-drop", "5")
+    assert code == 0
+    assert "target €70.00, min drop €5.00" in added
+
+    # Drop by €2.00 (< €5.00): no lower-price alert
+    aliexpress.offer("111", "98.00", "Gaming Console")
+    assert run(capsys, "check")[1] == ""
+
+    # Drop to €94.00 (€6.00 below €100.00): alert fires
+    aliexpress.offer("111", "94.00", "Gaming Console")
+    _, lowered, _ = run(capsys, "check")
+    assert lowered.startswith("LOWER PRICE #1: Gaming Console is €94.00 (previous low €98.00, target €70.00)")
+
+    # Switch to 10% min-drop: €90.00 is only 4.26% below €94.00 -> silent
+    run(capsys, "watch", "target", "#1", "70", "--min-drop", "10%")
+    aliexpress.offer("111", "90.00", "Gaming Console")
+    assert run(capsys, "check")[1] == ""
+
+    # Target reached always fires regardless of min-drop
+    aliexpress.offer("111", "69.50", "Gaming Console")
+    _, reached, _ = run(capsys, "check")
+    assert reached.startswith("TARGET REACHED #1: Gaming Console is €69.50")
+
+
+def test_watch_reject_marks_listing_as_not_matching(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    aliexpress.offer("222", "11.00", "Shelly Plus 1PM case")
+    run(capsys, "watch", "add", "shelly plus 1pm", "14")
+
+    code, out, _ = run(capsys, "watch", "reject", "#1", "https://www.aliexpress.com/item/222.html")
+    assert code == 0
+    assert out == "Rejected listing 222 for watch #1.\n"
+
+    # With 222 rejected, check now sees 111 (€15.20) instead of 222 (€11.00)
+    _, check_out, _ = run(capsys, "check")
+    assert check_out == ""
+    _, listing, _ = run(capsys, "watch", "list")
+    assert "now €15.20" in listing
+
+
+def test_check_prunes_price_points_older_than_90_days(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_time = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(cli_module, "now_utc", lambda: base_time)
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "111", "14")
+
+    store = WatchStore(load_settings().db_path)
+    store.record_price(1, 1600, base_time - timedelta(days=91))
+    assert len(store.price_history(1, limit=10)) == 2
+
+    monkeypatch.setattr(cli_module, "now_utc", lambda: base_time + timedelta(hours=1))
+    run(capsys, "check")
+
+    history = store.price_history(1, limit=10)
+    assert all(price != 1600 for _, price in history)

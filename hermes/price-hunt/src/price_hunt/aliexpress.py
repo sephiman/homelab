@@ -236,11 +236,19 @@ class AliExpressClient:
             raise AliExpressError("blocked by AliExpress anti-bot protection")
         return html
 
-    def search(self, keywords: str, max_price_cents: int | None = None, page_size: int = 20) -> list[Product]:
+    def search(
+        self,
+        keywords: str,
+        max_price_cents: int | None = None,
+        page_size: int = 20,
+        sort: str | None = None,
+    ) -> list[Product]:
         url = search_url(keywords)
         params: dict[str, str] = {}
         if max_price_cents is not None:
             params["maxPrice"] = f"{max_price_cents // 100}.{max_price_cents % 100:02d}"
+        if sort == "price":
+            params["SortType"] = "price_asc"
         if params:
             url += "?" + urllib.parse.urlencode(params)
 
