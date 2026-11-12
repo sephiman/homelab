@@ -166,10 +166,14 @@ install_ha_token() {
 readonly MORNING_SUMMARY_PROMPT='Write the morning summary of the homelab from the Script Output above, in under 15 lines.
 Mention only what needs a look (firing alerts, failed or old backup, disks above 80%, stopped or
 unhealthy containers, projects with many errors, security updates, projects with commits to pull,
-containers with a newer image, media health problems, batteries below 20%); never list what is
-fine. If nothing needs a look, reply with one line saying all is fine. For commits to pull or
-newer images, name the project so the user can ask you to update it. Never invent data that is
-not in the output.'
+containers with a newer image, media health or stuck downloads, HA safety alerts, disabled
+automations, batteries below 20%); never list what is fine. If nothing needs a look, reply with
+one line saying all is fine. For commits to pull or newer images, name the project so the user
+can ask you to update it. Never invent data that is not in the output.'
+
+readonly CAPACITY_REPORT_PROMPT='Write a concise weekly storage and capacity summary from the Script Output above (under 10 lines):
+highlight filesystems above 70%, Docker reclaimable space, and the largest Postgres databases.
+You have no tools in this run; never invent figures that are not in the output.'
 
 readonly HOLDINGS_REPORT_PROMPT='Write the daily portfolio report of the Shared Ledger household from the Script Output above,
 in euros, in 4-5 lines: crypto, ETF+stocks and the total, each with today'"'"'s value and its change
@@ -214,6 +218,7 @@ schedule_jobs() {
   [[ "$telegram_id" =~ ^[0-9]+$ ]] || die "TELEGRAM_ALLOWED_USERS in hermes/.env has no numeric user id"
   schedule_job morning-summary '0 8 * * *' daily-report.sh "$MORNING_SUMMARY_PROMPT" "$telegram_id"
   schedule_job holdings-report '10 8 * * *' holdings-report.sh "$HOLDINGS_REPORT_PROMPT" "$telegram_id"
+  schedule_job capacity-report '0 9 * * 1' capacity-report.sh "$CAPACITY_REPORT_PROMPT" "$telegram_id"
   schedule_job alert-diagnosis 'every 5m' alert-watch.sh "$ALERT_DIAGNOSIS_PROMPT" "$telegram_id"
   schedule_job price-watch 'every 1h' price-watch.sh "$PRICE_WATCH_PROMPT" "$telegram_id"
 }

@@ -68,6 +68,7 @@ sudo -n /usr/local/bin/homelab-manage.sh ha-logbook [hours] [entity_id]  # what 
 sudo -n /usr/local/bin/homelab-manage.sh ha-automation <automation.entity>  # its triggers, conditions, actions
 sudo -n /usr/local/bin/homelab-manage.sh ha-history <entity_id> [hours] [ending_hours_ago]  # state changes, sensors too
 sudo -n /usr/local/bin/homelab-manage.sh ha-light <on|off|toggle> <light.entity>
+sudo -n /usr/local/bin/homelab-manage.sh ha-energy                     # energy (kWh/Wh) and power (W) sensors
 ```
 
 - "How is X / is X on?" → find the entity with `ha-states <domain>` (or match the friendly name),
@@ -79,9 +80,8 @@ sudo -n /usr/local/bin/homelab-manage.sh ha-light <on|off|toggle> <light.entity>
   restarts). There is no `home-assistant.log` file, and the config folder and recorder database
   are closed to you on purpose (they hold tokens and passwords) — `ha-history` / `ha-logbook`
   read the recorder for you. Prometheus scraping it: `metrics 'up{job="homeassistant"}'`.
-- Energy ("how much did we use today?"): Home Assistant's Energy dashboard is built from sensors —
-  `ha-states sensor` and look at the ones in kWh / Wh (consumption, production) and W (current
-  power), then `ha-state` them. There's no other route to Home Assistant data.
+- Energy ("how much did we use today?"): run `ha-energy` first for all energy (kWh/Wh) and
+  power (W) sensors, then `ha-history` on a specific entity if needed.
 - "What happened / who turned on X / when did the door open?" → `ha-logbook` (default last 24h,
   max 168h), narrowed to one entity when you know it. The `by:` column is what caused the change
   (an automation, a person, a device).
@@ -115,6 +115,7 @@ sudo -n /usr/local/bin/homelab-manage.sh loki-search <project> <text> [hours]   
 sudo -n /usr/local/bin/homelab-manage.sh loki-errors [project] [hours]           # errors across everything, or one project
 sudo -n /usr/local/bin/homelab-manage.sh metrics '<promql>'                      # e.g. metrics 'container_memory_usage_bytes{name="tradelog-backend"}'
 sudo -n /usr/local/bin/homelab-manage.sh alerts                                  # alerts pending/firing now
+sudo -n /usr/local/bin/homelab-manage.sh capacity-report                         # disk, Docker, and Postgres sizes
 sudo -n /usr/local/bin/homelab-manage.sh daily-report                            # alerts, backup, disk, errors, updates (Ubuntu, git, images), media, HA
 ```
 
@@ -160,6 +161,8 @@ Media (Sonarr = series, Radarr = movies, Prowlarr = indexers, qBittorrent behind
 ```
 sudo -n /usr/local/bin/homelab-manage.sh media-health                        # each app's own health checks
 sudo -n /usr/local/bin/homelab-manage.sh media-queue                         # downloads with status and errors
+sudo -n /usr/local/bin/homelab-manage.sh media-stuck                         # stuck / importPending / warning downloads
+sudo -n /usr/local/bin/homelab-manage.sh media-calendar [days]               # upcoming Sonarr/Radarr releases (default 7d)
 sudo -n /usr/local/bin/homelab-manage.sh media-title <sonarr|radarr> '<title>'   # library entry, missing episodes, history
 sudo -n /usr/local/bin/homelab-manage.sh media-releases radarr '<title>'         # search indexers now, show rejections
 sudo -n /usr/local/bin/homelab-manage.sh media-releases sonarr '<title>' <season>

@@ -241,6 +241,7 @@ wrapper) so the model gets one prompt and **no tools**:
 |-----|----------|----------------|
 | Morning summary (`daily-report.sh`) | daily | 1 per day |
 | Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
+| Capacity report (`capacity-report.sh`) | weekly (Mon 09:00) | 1 per week |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
 | Price watch (`price-watch.sh`) | hourly | only when a watch reaches its target, hits a new low, or a product disappears |
 

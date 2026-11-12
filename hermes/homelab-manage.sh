@@ -15,6 +15,7 @@ readonly LOKI_URL=http://127.0.0.1:3100
 readonly PROMETHEUS_URL=http://127.0.0.1:9090
 readonly BACKUP_CONTAINER=backup
 readonly VPN_CONTAINER=gluetun
+readonly POSTGRES_CONTAINER=postgresdb
 readonly DEFAULT_SEARCH_HOURS=24
 readonly MAX_SEARCH_HOURS=720  # Loki keeps 30 days
 readonly MAX_QUERY_CHARS=500
@@ -71,20 +72,24 @@ usage: sudo -n homelab-manage.sh <action> [args]
   ha-history <entity_id> [hours] [ending_hours_ago]   state changes of one entity, sensors included
                                (default 24h ending now, max 168h, ending up to 720h ago; last 500)
   ha-light <on|off|toggle> <light.entity>   switch a light — the only Home Assistant write allowed
+  ha-energy                    Home Assistant energy (kWh/Wh) and power (W) sensors
   loki-search <project> <text> [hours]   log lines containing text, any container of a project (default 24h, max 720h; newest 500)
   loki-errors [project] [hours]          error/exception/fatal/panic lines, one project or all (same limits)
   metrics <promql>             one Prometheus instant query (max 500 chars)
   alerts                       Prometheus alerts currently pending or firing, with their labels
-  backup-status                last backup: files, checksums, log, copies on Google Drive
+  backup-status                last backup: files, checksums, size check, log, copies on Google Drive
   vpn-status                   gluetun health and its public IP vs. the host's (torrent leak check)
   media-health                 Sonarr/Radarr/Prowlarr health checks (indexers, download client…)
   media-queue                  Sonarr/Radarr download queue with status and error messages
+  media-stuck                  Sonarr/Radarr downloads stuck pending/blocked import or with warnings
+  media-calendar [days]        upcoming Sonarr/Radarr releases (default 7 days, max 30)
   media-title <sonarr|radarr> <title>   library entry, missing episodes and grab/import history
   media-releases <radarr> <title> | <sonarr> <title> <season>
                                search indexers now and list releases with why each is rejected
                                (slow; grabs nothing)
+  capacity-report              disk usage, Docker disk usage, and Postgres database sizes
   daily-report                 one-page summary: alerts, backup, disk, errors, updates (Ubuntu,
-                               git, images), media, HA batteries
+                               git, images), media, HA batteries/safety
 EOF
   exit 2
 }
@@ -376,11 +381,13 @@ container_env_value() {
 }
 
 backup_status() {
-  local archives latest
+  local archives latest prev prev_file cur_file prev_size cur_size pct warned=0
   archives="$(container_mount_source "$BACKUP_CONTAINER" /backups)"
   [[ -n "$archives" && -d "$archives" ]] || die "no $BACKUP_CONTAINER container with a /backups folder"
   latest="$(find "$archives" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 1)"
   [[ -n "$latest" ]] || die "no local backup in $archives"
+  prev="$(find "$archives" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 2 | head -n 1)"
+  [[ "$prev" != "$latest" ]] || prev=""
   echo "--- latest local backup: $(basename "$latest")"
   ls -lh "$latest" | tail -n +2
   [[ -e "$latest/.pending-upload" ]] && echo "not on Google Drive yet: upload pending (retried hourly at :35)"
@@ -390,6 +397,28 @@ backup_status() {
   else
     (cd "$latest" && timeout 900 sha256sum -c --quiet SHA256SUMS && echo "all files match SHA256SUMS") ||
       echo "CHECKSUM CHECK FAILED (see above)"
+  fi
+  if [[ -n "$prev" ]]; then
+    echo "--- size comparison vs $(basename "$prev")"
+    while IFS= read -r -d '' prev_file; do
+      local name
+      name="$(basename "$prev_file")"
+      [[ "$name" == "SHA256SUMS" || "$name" == ".pending-upload" ]] && continue
+      prev_size="$(stat -c %s "$prev_file")"
+      cur_file="$latest/$name"
+      if [[ ! -f "$cur_file" ]]; then
+        echo "WARNING: $name missing (was $(numfmt --to=iec "$prev_size"))"
+        warned=1
+      elif (( prev_size > 10240 )); then
+        cur_size="$(stat -c %s "$cur_file")"
+        pct=$(( cur_size * 100 / prev_size ))
+        if (( pct < 70 )); then
+          echo "WARNING: $name shrank to ${pct}% ($(numfmt --to=iec "$cur_size") vs $(numfmt --to=iec "$prev_size"))"
+          warned=1
+        fi
+      fi
+    done < <(find "$prev" -maxdepth 1 -type f -print0 | sort -z)
+    (( warned == 0 )) && echo "ok (no archive shrank >30%)"
   fi
   echo "--- backup log (last run)"
   docker logs --tail 300 "$BACKUP_CONTAINER" 2>&1 |
@@ -449,6 +478,48 @@ media_health() {
   done
 }
 
+media_stuck() {
+  local app
+  for app in sonarr radarr; do
+    resolve_arr "$app"
+    echo "--- $app"
+    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+      jq -r '
+        [.records[] | select(
+          .trackedDownloadState == "importPending"
+          or .trackedDownloadState == "importBlocked"
+          or (.trackedDownloadStatus != null and .trackedDownloadStatus != "ok")
+          or (.errorMessage != null and .errorMessage != "")
+        )]
+        | if length == 0 then "none" else .[]
+          | [(.series.title // .movie.title // "?")
+             + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
+             (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
+             ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
+          | @tsv end' || echo "unreachable"
+  done
+}
+
+media_calendar() {
+  local days="$1" start end
+  start="$(date -u +%F)"
+  end="$(date -u -d "+${days} days" +%F)"
+  resolve_arr sonarr
+  echo "--- sonarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end&includeSeries=true" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [(.airDateUtc // "?")[0:16], (.series.title // "?"),
+         "S\(.seasonNumber)E\(.episodeNumber)", (.title // "")]
+      | @tsv end'
+  resolve_arr radarr
+  echo "--- radarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [((.digitalRelease // .physicalRelease // .inCinemas // "?")[0:10]),
+         .title, (if .hasFile then "downloaded" else "missing" end)]
+      | @tsv end'
+}
+
 media_queue() {
   local app
   for app in sonarr radarr; do
@@ -463,6 +534,48 @@ media_queue() {
            ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
         | @tsv end'
   done
+}
+
+media_stuck() {
+  local app
+  for app in sonarr radarr; do
+    resolve_arr "$app"
+    echo "--- $app"
+    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+      jq -r '
+        [.records[] | select(
+          .trackedDownloadState == "importPending"
+          or .trackedDownloadState == "importBlocked"
+          or (.trackedDownloadStatus != null and .trackedDownloadStatus != "ok")
+          or (.errorMessage != null and .errorMessage != "")
+        )]
+        | if length == 0 then "none" else .[]
+          | [(.series.title // .movie.title // "?")
+             + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
+             (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
+             ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
+          | @tsv end' || echo "unreachable"
+  done
+}
+
+media_calendar() {
+  local days="$1" start end
+  start="$(date -u +%F)"
+  end="$(date -u -d "+${days} days" +%F)"
+  resolve_arr sonarr
+  echo "--- sonarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end&includeSeries=true" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [(.airDateUtc // "?")[0:16], (.series.title // "?"),
+         "S\(.seasonNumber)E\(.episodeNumber)", (.title // "")]
+      | @tsv end'
+  resolve_arr radarr
+  echo "--- radarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [((.digitalRelease // .physicalRelease // .inCinemas // "?")[0:10]),
+         .title, (if .hasFile then "downloaded" else "missing" end)]
+      | @tsv end'
 }
 
 # Prints the library id of the title, preferring an exact (case-insensitive) title match.
@@ -563,6 +676,48 @@ pending_git_updates() {
   done
 }
 
+media_stuck() {
+  local app
+  for app in sonarr radarr; do
+    resolve_arr "$app"
+    echo "--- $app"
+    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+      jq -r '
+        [.records[] | select(
+          .trackedDownloadState == "importPending"
+          or .trackedDownloadState == "importBlocked"
+          or (.trackedDownloadStatus != null and .trackedDownloadStatus != "ok")
+          or (.errorMessage != null and .errorMessage != "")
+        )]
+        | if length == 0 then "none" else .[]
+          | [(.series.title // .movie.title // "?")
+             + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
+             (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
+             ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
+          | @tsv end' || echo "unreachable"
+  done
+}
+
+media_calendar() {
+  local days="$1" start end
+  start="$(date -u +%F)"
+  end="$(date -u -d "+${days} days" +%F)"
+  resolve_arr sonarr
+  echo "--- sonarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end&includeSeries=true" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [(.airDateUtc // "?")[0:16], (.series.title // "?"),
+         "S\(.seasonNumber)E\(.episodeNumber)", (.title // "")]
+      | @tsv end'
+  resolve_arr radarr
+  echo "--- radarr ($start to $end)"
+  arr_get "calendar?start=$start&end=$end" |
+    jq -r 'if length == 0 then "none" else .[]
+      | [((.digitalRelease // .physicalRelease // .inCinemas // "?")[0:10]),
+         .title, (if .hasFile then "downloaded" else "missing" end)]
+      | @tsv end'
+}
+
 # Digest the registry serves for a tag right now, asked anonymously with HEAD (which doesn't count
 # against Docker Hub's pull limit). Prints nothing for private images.
 registry_digest() {
@@ -647,15 +802,54 @@ daily_report() {
   pending_image_updates || true
   echo "=== media"
   media_health 2>&1 || true
+  echo "=== media: stuck downloads"
+  media_stuck 2>&1 || true
   # Unavailable entities are left out: they come and go with Zigbee/Wi-Fi drops and are noise here.
   echo "=== Home Assistant: low batteries"
   if [[ -r "$HA_AUTH_HEADER_FILE" ]]; then
-    ha_get states | jq -r '.[]
+    local ha_states_json
+    ha_states_json="$(ha_get states)"
+    jq -r '.[]
       | select(.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20)
-      | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' | head -n 40
+      | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json" | head -n 40
+    echo "=== Home Assistant: safety & disabled automations"
+    {
+      jq -r '.[]
+        | select((.entity_id | startswith("binary_sensor."))
+            and (.attributes.device_class | IN("smoke", "gas", "moisture", "carbon_monoxide", "tamper"))
+            and .state == "on")
+        | ["ALERT", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
+      jq -r '.[]
+        | select(.entity_id | startswith("automation.") and .state == "off")
+        | ["OFF", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
+    } | head -n 40
   else
     echo "not configured"
   fi
+}
+
+capacity_report() {
+  echo "=== disk (used %)"
+  df -h -x tmpfs -x overlay -x devtmpfs -x squashfs -x efivarfs || true
+  echo "=== docker disk usage"
+  docker system df || true
+  echo "=== postgres database sizes"
+  if docker inspect --type container "$POSTGRES_CONTAINER" &>/dev/null; then
+    docker exec "$POSTGRES_CONTAINER" psql -U root -d postgres -Atc \
+      "SELECT datname || ': ' || pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE NOT datistemplate ORDER BY pg_database_size(datname) DESC;" ||
+      echo "postgres query failed"
+  else
+    echo "$POSTGRES_CONTAINER container not found"
+  fi
+}
+
+ha_energy() {
+  ha_get states | jq -r '
+    .[]
+    | select((.entity_id | startswith("sensor."))
+        and (.attributes.device_class | IN("energy", "power")))
+    | [.entity_id, .state, (.attributes.unit_of_measurement // ""), (.attributes.friendly_name // "")]
+    | @tsv' | sort
 }
 
 ha_automations() {
@@ -876,6 +1070,16 @@ case "$action" in
     [[ $# -eq 0 ]] || usage
     media_queue
     ;;
+  media-stuck)
+    [[ $# -eq 0 ]] || usage
+    media_stuck
+    ;;
+  media-calendar)
+    [[ $# -le 1 ]] || usage
+    days="${1:-7}"
+    [[ "$days" =~ ^[0-9]{1,2}$ ]] && (( days >= 1 && days <= 30 )) || die "days must be 1-30"
+    media_calendar "$days"
+    ;;
   media-title)
     [[ $# -eq 2 ]] || usage
     [[ "$1" == sonarr || "$1" == radarr ]] || die "app must be sonarr or radarr"
@@ -888,9 +1092,17 @@ case "$action" in
     (( ${#2} >= 2 && ${#2} <= 100 )) || die "title must be 2-100 characters"
     media_releases "$1" "$2" "${3:-}"
     ;;
+  capacity-report)
+    [[ $# -eq 0 ]] || usage
+    capacity_report
+    ;;
   daily-report)
     [[ $# -eq 0 ]] || usage
     daily_report
+    ;;
+  ha-energy)
+    [[ $# -eq 0 ]] || usage
+    ha_energy
     ;;
   ha-light)
     [[ $# -eq 2 ]] || usage
