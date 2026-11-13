@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS watches (
     available           INTEGER NOT NULL DEFAULT 1,
     last_notified_cents INTEGER,
     min_drop_cents      INTEGER,
-    min_drop_bps        INTEGER
+    min_drop_bps        INTEGER,
+    chat_id             TEXT
 );
 CREATE TABLE IF NOT EXISTS price_points (
     watch_id    INTEGER NOT NULL REFERENCES watches (id) ON DELETE CASCADE,
@@ -25,10 +26,10 @@ CREATE TABLE IF NOT EXISTS price_points (
     price_cents INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS price_points_by_watch ON price_points (watch_id, checked_at);
-CREATE TABLE IF NOT EXISTS check_status (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
-    last_error  TEXT,
-    reported_at TEXT
+CREATE TABLE IF NOT EXISTS check_errors (
+    chat_id     TEXT PRIMARY KEY,
+    last_error  TEXT NOT NULL,
+    reported_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS watch_candidates (
     watch_id   INTEGER NOT NULL REFERENCES watches (id) ON DELETE CASCADE,
@@ -51,6 +52,7 @@ class Watch:
     last_notified_cents: int | None
     min_drop_cents: int | None = None
     min_drop_bps: int | None = None
+    chat_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,9 +82,10 @@ class WatchStore:
                 db.execute("ALTER TABLE watches ADD COLUMN min_drop_cents INTEGER")
             if "min_drop_bps" not in columns:
                 db.execute("ALTER TABLE watches ADD COLUMN min_drop_bps INTEGER")
-            status_cols = {row[1] for row in db.execute("PRAGMA table_info(check_status)")}
-            if "reported_at" not in status_cols:
-                db.execute("ALTER TABLE check_status ADD COLUMN reported_at TEXT")
+            if "chat_id" not in columns:
+                db.execute("ALTER TABLE watches ADD COLUMN chat_id TEXT")
+            # Replaced by check_errors when each chat got its own job.
+            db.execute("DROP TABLE IF EXISTS check_status")
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -97,14 +100,24 @@ class WatchStore:
         url: str,
         target_cents: int,
         now: datetime,
+        chat_id: str,
         min_drop_cents: int | None = None,
         min_drop_bps: int | None = None,
     ) -> Watch:
         with self._connection() as db:
             cursor = db.execute(
                 "INSERT INTO watches (product_id, title, url, target_cents, created_at,"
-                " min_drop_cents, min_drop_bps) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (product_id, title, url, target_cents, now.isoformat(), min_drop_cents, min_drop_bps),
+                " min_drop_cents, min_drop_bps, chat_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    product_id,
+                    title,
+                    url,
+                    target_cents,
+                    now.isoformat(),
+                    min_drop_cents,
+                    min_drop_bps,
+                    chat_id,
+                ),
             )
             watch_id = cursor.lastrowid
         assert watch_id is not None
@@ -119,6 +132,7 @@ class WatchStore:
             None,
             min_drop_cents,
             min_drop_bps,
+            chat_id,
         )
 
     @staticmethod
@@ -131,6 +145,7 @@ class WatchStore:
         assert row[7] is None or isinstance(row[7], int)
         assert row[8] is None or isinstance(row[8], int)
         assert row[9] is None or isinstance(row[9], int)
+        assert row[10] is None or isinstance(row[10], str)
         return Watch(
             row[0],
             row[1],
@@ -142,21 +157,30 @@ class WatchStore:
             row[7],
             row[8],
             row[9],
+            row[10],
         )
 
-    def all(self) -> list[Watch]:
+    def all(self, chat_id: str | None = None) -> list[Watch]:
+        """Every watch, or only those of *chat_id*."""
         with self._connection() as db:
             rows = db.execute(
                 "SELECT id, product_id, title, url, target_cents, notified, available,"
-                " last_notified_cents, min_drop_cents, min_drop_bps FROM watches ORDER BY id"
+                " last_notified_cents, min_drop_cents, min_drop_bps, chat_id FROM watches"
+                " WHERE ? IS NULL OR chat_id = ? ORDER BY id",
+                (chat_id, chat_id),
             ).fetchall()
         return [self._row_to_watch(row) for row in rows]
+
+    def adopt_unowned(self, chat_id: str) -> None:
+        """Watches from before per-chat delivery went to the default chat; they stay there."""
+        with self._connection() as db:
+            db.execute("UPDATE watches SET chat_id = ? WHERE chat_id IS NULL", (chat_id,))
 
     def get(self, watch_id: int) -> Watch | None:
         with self._connection() as db:
             row = db.execute(
                 "SELECT id, product_id, title, url, target_cents, notified, available,"
-                " last_notified_cents, min_drop_cents, min_drop_bps FROM watches WHERE id = ?",
+                " last_notified_cents, min_drop_cents, min_drop_bps, chat_id FROM watches WHERE id = ?",
                 (watch_id,),
             ).fetchone()
         return self._row_to_watch(row) if row else None
@@ -263,29 +287,24 @@ class WatchStore:
                 [(watch_id, product_id, is_match) for product_id, is_match in verdicts.items()],
             )
 
-    def should_report_error(self, error: str, now: datetime) -> bool:
+    def should_report_error(self, chat_id: str, error: str, now: datetime) -> bool:
         with self._connection() as db:
-            row = db.execute("SELECT last_error, reported_at FROM check_status WHERE id = 1").fetchone()
-        if not row or row[0] != error or not row[1]:
+            row = db.execute(
+                "SELECT last_error, reported_at FROM check_errors WHERE chat_id = ?", (chat_id,)
+            ).fetchone()
+        if not row or row[0] != error:
             return True
-        reported_at = datetime.fromisoformat(row[1])
-        return (now - reported_at) >= timedelta(hours=24)
+        return (now - datetime.fromisoformat(row[1])) >= timedelta(hours=24)
 
-    def last_error(self) -> str | None:
-        with self._connection() as db:
-            row = db.execute("SELECT last_error FROM check_status WHERE id = 1").fetchone()
-        return row[0] if row else None
-
-    def set_last_error(self, error: str | None, now: datetime | None = None) -> None:
-        reported_at = now.isoformat() if now is not None else None
+    def set_last_error(self, chat_id: str, error: str, now: datetime) -> None:
         with self._connection() as db:
             db.execute(
-                "INSERT INTO check_status (id, last_error, reported_at) VALUES (1, ?, ?) "
-                "ON CONFLICT (id) DO UPDATE SET "
+                "INSERT INTO check_errors (chat_id, last_error, reported_at) VALUES (?, ?, ?) "
+                "ON CONFLICT (chat_id) DO UPDATE SET "
                 "last_error = excluded.last_error, reported_at = excluded.reported_at",
-                (error, reported_at),
+                (chat_id, error, now.isoformat()),
             )
 
-    def clear_last_error(self) -> None:
+    def clear_last_error(self, chat_id: str) -> None:
         with self._connection() as db:
-            db.execute("DELETE FROM check_status WHERE id = 1")
+            db.execute("DELETE FROM check_errors WHERE chat_id = ?", (chat_id,))

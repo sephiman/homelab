@@ -58,16 +58,21 @@ store price like "€49 here"):
   across all sellers**, not one listing: every hourly check runs the search and a model call
   classifies new listings as the product or as accessories/variants (the verdict is
   cached, so quiet hours cost nothing). It messages the user when the cheapest verified offer
-  reaches the target or drops to a new 30-day low (even while above the target), once per price.
+  reaches the target or drops to a new 30-day low (even while above the target), once per price,
+  in the chat the watch was set from.
   `watch add <link or id> <euros>` starts
   from a specific listing: the model extracts the clean product name from its title, and
-  cheaper verified offers from other sellers alert too. One scheduled job (`price-watch`,
-  hourly) checks every watch. Never create a cron job for an alert: the existing job covers
-  all of them.
+  cheaper verified offers from other sellers alert too. One scheduled job per chat
+  (`price-watch-<chat id>`, hourly) checks that chat's watches. Never create a cron job for an
+  alert: those jobs cover all of them.
 - **Amazon EU (.nl, .de, .es, .fr, .it):** you can't watch Amazon. Tell the user to set a
   price tracker with the Keepa extension on the product page (or on keepa.com), which alerts
   them itself.
-- "My alerts" → `watch list`; "price history for X" → `watch history <id>`; "change target to €Y"
+- **Which chat gets the alert:** the chat the request came from, by default (price-hunt reads
+  `$HERMES_SESSION_CHAT_ID` itself, so pass nothing). When the user names another chat ("… and
+  tell the family group"), add `--chat "<name>"` to `watch add`. If price-hunt answers that no chat
+  has that name, or that the chat has no scheduled job, tell the user exactly that; never guess an id.
+- "My alerts" → `watch list` (this chat's; `watch list --all` for every chat); "price history for X" → `watch history <id>`; "change target to €Y"
   → `watch target <id> <euros>`; "only alert on drops of at least €X / Y%" → pass `--min-drop`
   to `watch add` or `watch target` (use `none` to clear it); "that listing is an accessory/wrong
   variant" → `watch reject <id> <product id or link>`; "stop watching X" → `watch list` to find

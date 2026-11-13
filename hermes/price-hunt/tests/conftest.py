@@ -14,6 +14,9 @@ import price_hunt.cli as cli_module
 from price_hunt.aliexpress import Product
 from price_hunt.errors import VerifierError
 
+OWNER_CHAT = "111111111"
+FAMILY_CHAT = "-1009999999999"
+
 
 @dataclass
 class FakeVerifier:
@@ -193,6 +196,13 @@ def aliexpress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fake
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.delenv("HERMES_SESSION_CHAT_ID", raising=False)
+    (tmp_path / ".env").write_text(
+        f"TELEGRAM_ALLOWED_USERS={OWNER_CHAT}\nTELEGRAM_ALLOWED_CHATS={FAMILY_CHAT}\n"
+    )
+    (tmp_path / "channel_directory.json").write_text(
+        json.dumps({"telegram": [{"id": FAMILY_CHAT, "name": "Family", "type": "group"}]})
+    )
     monkeypatch.setattr(aliexpress_module, "ALIEXPRESS_BASE", fake.url)
     monkeypatch.setattr(cli_module, "build_verifier", lambda: fake.verifier)
     yield fake

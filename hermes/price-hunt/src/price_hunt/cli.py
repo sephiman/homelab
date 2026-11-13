@@ -5,10 +5,13 @@ import urllib.parse
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from agent_context.chats import ChatError, Chats
+from agent_context.llm import load_llm_config
+
 from price_hunt.aliexpress import AliExpressClient, Product, item_url, product_id_in, search_url
 from price_hunt.checking import LOWEST_PRICE_WINDOW, Finding, FindingKind, check_watch, check_watches
 from price_hunt.errors import InvalidInputError, PriceHuntError, VerifierError
-from price_hunt.llm import ListingVerifier, load_llm_config
+from price_hunt.llm import ListingVerifier
 from price_hunt.money import format_euros, format_min_drop, parse_euros, parse_min_drop
 from price_hunt.settings import load_settings
 from price_hunt.watches import WatchStore
@@ -30,6 +33,7 @@ EU_COMPARISON_SEARCHES = (
     ("Idealo.de", "https://www.idealo.de/preisvergleich/MainSearchProductCategory.html?q="),
     ("Idealo.es", "https://www.idealo.es/resultados.html?q="),
 )
+CHAT_HELP = "Telegram chat id or name for the alerts (default: the chat you are in)"
 
 
 def build_verifier() -> ListingVerifier | None:
@@ -77,6 +81,7 @@ def _search(args: argparse.Namespace) -> int:
 def _watch_add(args: argparse.Namespace) -> int:
     target = parse_euros(args.target)
     min_drop_cents, min_drop_bps = parse_min_drop(args.min_drop) if args.min_drop else (None, None)
+    chat = Chats.load().resolve(args.chat)
     settings = load_settings()
     client = AliExpressClient(settings)
     verifier = build_verifier()
@@ -103,15 +108,19 @@ def _watch_add(args: argparse.Namespace) -> int:
             item_url(product_id),
             target,
             now,
+            chat.id,
             min_drop_cents,
             min_drop_bps,
         )
         store.save_verdicts(watch.id, {product_id: True})
     else:
-        watch = store.add("", reference, search_url(reference), target, now, min_drop_cents, min_drop_bps)
+        watch = store.add(
+            "", reference, search_url(reference), target, now, chat.id, min_drop_cents, min_drop_bps
+        )
 
     drop_label = format_min_drop(min_drop_cents, min_drop_bps)
     drop_suffix = f", min drop {drop_label}" if drop_label else ""
+    print(f"Alerts go to {chat.label}.")
 
     try:
         outcome = check_watch(store, client, verifier, watch, now)
@@ -142,11 +151,13 @@ def _watch_add(args: argparse.Namespace) -> int:
     return 0
 
 
-def _watch_list(_: argparse.Namespace) -> int:
+def _watch_list(args: argparse.Namespace) -> int:
+    chats = Chats.load()
+    chat = None if args.all else chats.resolve(args.chat)
     store = WatchStore(load_settings().db_path)
-    watches = store.all()
+    watches = store.all(chat.id if chat else None)
     if not watches:
-        print("No AliExpress price watches.")
+        print(f"No AliExpress price watches{f' for {chat.label}' if chat else ''}.")
     since = datetime.now(UTC) - LOWEST_PRICE_WINDOW
     for watch in watches:
         summary = store.price_summary(watch.id, since)
@@ -160,10 +171,14 @@ def _watch_list(_: argparse.Namespace) -> int:
                 "" if watch.available else " [unavailable]",
             ]
         )
+        owner = f"\n   alerts to {chats.chat(watch.chat_id).label}" if chat is None and watch.chat_id else ""
         print(
             f"#{watch.id} {watch.title}\n   now {now}, target {format_euros(watch.target_cents)}{drop_text}, "
-            f"lowest 30 days {lowest}{flags}\n   {watch.url}"
+            f"lowest 30 days {lowest}{flags}\n   {watch.url}{owner}"
         )
+    elsewhere = len(store.all()) - len(watches)
+    if elsewhere:
+        print(f"{elsewhere} more in other chats: watch list --all")
     return 0
 
 
@@ -268,24 +283,28 @@ def _finding_text(finding: Finding) -> str:
     return f"{text}\n{watch.url}"
 
 
-def _check(_: argparse.Namespace) -> int:
+def _check(args: argparse.Namespace) -> int:
     """Prints only what changed, so the cron job stays silent (and skips the model) on a quiet run."""
+    chats = Chats.load()
+    chat = chats.resolve(args.chat)
     settings = load_settings()
     store = WatchStore(settings.db_path)
+    if chat == chats.default:
+        store.adopt_unowned(chat.id)
     now = now_utc()
-    findings, check_error = check_watches(store, AliExpressClient(settings), build_verifier(), now)
+    findings, check_error = check_watches(store, AliExpressClient(settings), build_verifier(), now, chat.id)
 
     for finding in findings:
         print(_finding_text(finding))
 
     if check_error is not None:
         # Re-reported once every 24h if it stays broken; silent in between so it doesn't spam.
-        if store.should_report_error(str(check_error), now):
+        if store.should_report_error(chat.id, str(check_error), now):
             print(f"PRICE CHECK FAILED: {check_error}")
-            store.set_last_error(str(check_error), now)
+            store.set_last_error(chat.id, str(check_error), now)
         return 0
 
-    store.clear_last_error()
+    store.clear_last_error(chat.id)
     return 0
 
 
@@ -313,8 +332,12 @@ def _parser() -> argparse.ArgumentParser:
         dest="min_drop",
         help="minimum drop for new-low alerts above target (e.g. '5', '2.50', or '5%%')",
     )
+    add.add_argument("--chat", help=CHAT_HELP)
     add.set_defaults(run=_watch_add)
-    watch.add_parser("list").set_defaults(run=_watch_list)
+    listing = watch.add_parser("list", help="this chat's watches")
+    listing.add_argument("--chat", help=CHAT_HELP)
+    listing.add_argument("--all", action="store_true", help="the watches of every chat")
+    listing.set_defaults(run=_watch_list)
     target_cmd = watch.add_parser("target", help="update target price without losing history")
     target_cmd.add_argument("id", type=lambda text: int(text.lstrip("#")))
     target_cmd.add_argument("target", help="new target price in euros")
@@ -336,7 +359,9 @@ def _parser() -> argparse.ArgumentParser:
     remove.add_argument("id", type=lambda text: int(text.lstrip("#")))
     remove.set_defaults(run=_watch_remove)
 
-    commands.add_parser("check", help="check every watch (run by the cron job)").set_defaults(run=_check)
+    check = commands.add_parser("check", help="check a chat's watches (run by its scheduled job)")
+    check.add_argument("--chat", help=CHAT_HELP)
+    check.set_defaults(run=_check)
     return parser
 
 
@@ -344,7 +369,7 @@ def main(argv: Sequence[str]) -> int:
     args = _parser().parse_args(argv)
     try:
         result: int = args.run(args)
-    except PriceHuntError as error:
+    except (PriceHuntError, ChatError) as error:
         print(f"price-hunt: {error}", file=sys.stderr)
         return 1
     return result

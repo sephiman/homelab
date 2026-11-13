@@ -1,70 +1,8 @@
-from pathlib import Path
-
-import pytest
+from agent_context.llm import LlmConfig
 from conftest import FakeAliExpress
 
 from price_hunt.aliexpress import Product
-from price_hunt.llm import ListingVerifier, LlmConfig, load_llm_config
-
-CONFIG = """\
-timezone: Europe/Madrid
-model:
-  default: deepseek-v4.1-flash
-  provider: opencode-go
-  base_url: https://opencode.ai/zen/go/v1
-
-model_aliases:
-  flash:
-    model: other-model
-"""
-
-
-@pytest.fixture
-def managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    config = tmp_path / "config.yaml"
-    config.write_text(CONFIG)
-    home = tmp_path / "home"
-    home.mkdir()
-    (home / ".env").write_text("OPENCODE_GO_API_KEY=go-key\n")
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    return config
-
-
-def test_load_llm_config_reads_the_managed_model(managed: Path) -> None:
-    assert load_llm_config(managed) == LlmConfig(
-        base_url="https://opencode.ai/zen/go/v1", model="deepseek-v4.1-flash", api_key="go-key"
-    )
-
-
-def test_load_llm_config_without_the_provider_key(managed: Path) -> None:
-    (managed.parent / "home" / ".env").write_text("OTHER_VAR=x\n")
-
-    assert load_llm_config(managed) is None
-
-
-def test_load_llm_config_ignores_non_openai_compatible_providers(tmp_path: Path) -> None:
-    config = tmp_path / "config.yaml"
-    config.write_text("model:\n  default: m\n  provider: gemini\n  base_url: https://x/v1\n")
-
-    assert load_llm_config(config) is None
-
-
-def test_load_llm_config_reads_openai_compatible_custom_providers(tmp_path: Path) -> None:
-    config = tmp_path / "config.yaml"
-    config.write_text(
-        "model:\n  default: m\n  provider: custom:groq\n  base_url: https://api.groq.com/openai/v1\n"
-    )
-    home = tmp_path / "home"
-    home.mkdir()
-    (home / ".env").write_text("GROQ_API_KEY=groq-key\n")
-
-    assert load_llm_config(config, environ={"HERMES_HOME": str(home)}) == LlmConfig(
-        base_url="https://api.groq.com/openai/v1", model="m", api_key="groq-key"
-    )
-
-
-def test_load_llm_config_without_a_config_file(tmp_path: Path) -> None:
-    assert load_llm_config(tmp_path / "absent.yaml") is None
+from price_hunt.llm import ListingVerifier
 
 
 def test_listing_verifier_asks_the_model_and_reads_matching_ids(

@@ -25,6 +25,7 @@ dangerous-command checks on container backends.
 | Postgres: reading `crypto_ambush`, `sharedledger`, `tradelog` and `tradeschool`, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; `CONNECT` granted only on those databases |
 | Project source code (`code-ls`, `code-show`, `code-grep`) and `git-pull` | Read from git `HEAD` as the folder's owner — gitignored files (`.env`…) are unreachable and secret-looking files (`.env*`, `*.key`, `*secret*`…) are refused even if committed |
 | AliExpress product search and price watches (`price-hunt`) | Unprivileged CLI in `/usr/local/bin` (root-owned), stdlib Python; reads the public AliExpress site over 443, no API key needed |
+| Page watches and reminders (`page-watch`) | Unprivileged CLI in `/usr/local/bin` (root-owned), stdlib Python; fetches the page you name over 443 like a browser without JavaScript, never logs in |
 | Messages from your Telegram account only | `TELEGRAM_ALLOWED_USERS`; everyone else is ignored silently |
 
 | Denied | How |
@@ -84,8 +85,11 @@ can't restart anything. To switch a toolset off entirely, list it under
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
 | `AGENTS.md` | `/home/hermes/workspace/AGENTS.md`, symlinked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | `price-hunt/` | `/usr/local/lib/price-hunt` + `/usr/local/bin/price-hunt` (root-owned) — [price hunting](#price-hunting) |
+| `page-watch/` | `/usr/local/lib/page-watch` + `/usr/local/bin/page-watch` (root-owned) — [page watching](#page-watching) |
+| `agent-context/` | `/usr/local/lib/agent-context` (root-owned) — what both CLIs read about Hermes: its model and key, timezone and Telegram chats |
 | `skills/price-hunter/SKILL.md` | `/home/hermes/.hermes/skills/shopping/price-hunter/` (root-owned file) |
-| `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs) |
+| `skills/page-watcher/SKILL.md` | `/home/hermes/.hermes/skills/productivity/page-watcher/` (root-owned file) |
+| `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs), plus a generated `price-watch-<chat>.sh` / `page-watch-<chat>.sh` per chat |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
 ## Install
@@ -234,8 +238,8 @@ the host's IP. It reports and suggests; it can't grab, delete or change profiles
 
 ## Scheduled jobs
 
-Four jobs, each gathering their data in a pre-run script (`scripts/`, run as `hermes` through the
-wrapper) so the model gets one prompt and **no tools**:
+Each job gathers its data in a pre-run script (`scripts/`, run as `hermes` through the wrapper) so
+the model gets one prompt and **no tools**:
 
 | Job | Schedule | Model requests |
 |-----|----------|----------------|
@@ -243,7 +247,18 @@ wrapper) so the model gets one prompt and **no tools**:
 | Holdings report (`holdings-report.sh`) | daily | 1 per day; none while the household holds nothing |
 | Capacity report (`capacity-report.sh`) | weekly (Mon 09:00) | 1 per week |
 | Alert diagnosis (`alert-watch.sh`) | every 5 min | only when an alert starts firing; quiet runs exit without calling the model |
-| Price watch (`price-watch.sh`) | hourly | only when a watch reaches its target, hits a new low, or a product disappears |
+| Price watch (`price-watch.sh`), one per chat | hourly | only when one of the chat's watches reaches its target, hits a new low, or a product disappears |
+| Page watch (`page-watch.sh`), one per chat | every 5 min | only when one of the chat's watches is met, a reminder is due, or a page keeps failing; each watch fetches its page at its own interval |
+
+Price and page watches alert the chat they were set from. Hermes runs a job's script without
+arguments and delivers to one fixed target, so `install-host.sh` creates a `price-watch-<chat id>`
+and a `page-watch-<chat id>` job for every chat in `TELEGRAM_ALLOWED_USERS` (your private chat)
+and `TELEGRAM_ALLOWED_CHATS`, each with a two-line `<job>-<chat id>.sh` script that passes its chat
+id to the shared one. A watch set from a chat outside those lists is refused, since no job would
+deliver it. After adding a chat to `TELEGRAM_ALLOWED_CHATS`, re-run `install-host.sh` to get its
+jobs; after removing one, remove its two jobs with `hermes cron remove <name>`. Watches from before
+this change stay with your private chat, and `install-host.sh` removes the old single
+`price-watch` job.
 
 The alert watcher sends a diagnosis next to Alertmanager's own message: which container, its
 state and recent logs, errors across projects, and backup/media/Home Assistant/host details when
@@ -251,8 +266,8 @@ the alert is about those. It remembers what it already reported, so each alert i
 (again only if it resolves and fires again). If Prometheus itself can't be queried, that is
 reported once as `AlertWatcherCannotQueryPrometheus`.
 
-`install-host.sh` creates them once Hermes is installed, delivered to the first id in
-`TELEGRAM_ALLOWED_USERS`; it holds their prompts and leaves jobs that already exist alone. Don't
+`install-host.sh` creates them once Hermes is installed, the reports delivered to the first id in
+`TELEGRAM_ALLOWED_USERS` and the watch jobs to their own chats; it holds their prompts and leaves jobs that already exist alone. Don't
 create them by asking the bot: a job made from chat has no pre-run script and keeps the bot's
 tools. Check them with `sudo -iu hermes /home/hermes/.local/bin/hermes cron list`.
 
@@ -290,7 +305,7 @@ offers, or ask for an alert — "tell me when it drops below €14". The `price-
 
 | Shop | Search | Price alerts |
 |------|--------|--------------|
-| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add "<name>" <€>` or `<link> <€>`; the `price-watch` job checks hourly for the cheapest verified offer across sellers and messages you once per new low |
+| AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add "<name>" <€>` or `<link> <€>`; the chat's `price-watch-<chat id>` job checks hourly for the cheapest verified offer across sellers and messages that chat once per new low |
 | Amazon EU (`.nl`, `.de`, `.es`, `.fr`, `.it`) | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
 
 Watches match listings with the help of the model (the same one Hermes chats with, read from
@@ -306,6 +321,42 @@ required. Check it: `sudo -iu hermes price-hunt search shelly plus 1pm`.
 
 Develop and test it with `uv` from `price-hunt/`: `uv run pytest`, `uv run mypy`,
 `uv run ruff check`. The tests run the CLI against a fake AliExpress site, no network needed.
+
+## Page watching
+
+Ask for anything a web page will show later — "let me know when tickets for The Band on 14 March
+go on sale", "tell me when the Pi 6 is back in stock at Kiwi" — or for a reminder — "remind me on
+Friday at 09:55 to book". The `page-watcher` skill drives [`page-watch`](./page-watch): Hermes finds
+the official page (or uses your link), writes the condition as one precise sentence, and picks how
+often to check (hourly by default; every 5 minutes from just before an announced sale time).
+
+Each check costs a model call only when the page actually changed:
+
+1. The page is fetched like a browser without JavaScript and reduced to its visible text.
+2. Only the lines around the event or product (the anchors the model picked when the watch was
+   added) are compared with the last check; a change elsewhere on the page is ignored.
+3. If they changed but the "not yet" wording the model noted ("Coming soon", "Sold out") is all
+   still there and no "Buy tickets"-like wording appeared, nothing is asked either.
+4. Otherwise the model reads that part and answers whether the condition is met. Verdicts are cached
+   per version of the page, so a page that flips back and forth is judged once per version.
+
+A met condition is reported once and the watch stops. A page that fails 3 checks in a row is
+reported once (FAILING), and so is a page that costs 6+ model calls a day (NOISY), with the hint to
+check less often or pick a simpler page. Reminders are sent at their local time (`timezone:` in
+`config.yaml`) and cost no model call until then.
+
+Limits:
+
+- Big resellers and marketplaces (Ticketmaster, Eventim, large web shops) often answer scripts with
+  Cloudflare, captchas or a queue, and many sites render with JavaScript. `page-watch add` refuses
+  those pages and Hermes offers another page that will show it (the original source, an
+  announcement page) or a reminder at the announced time instead.
+- It tells you the page shows it; it can't book, buy, register or keep a place in a queue.
+- With 5-minute checks the alert arrives up to ~5 minutes after the change, plus the model's reply.
+
+Check it: `sudo -iu hermes page-watch list --all`. Develop and test it with `uv` from
+`page-watch/` (and `agent-context/`): `uv run pytest`, `uv run mypy`, `uv run ruff check`. The tests
+run the CLI against a fake site and a fake model endpoint, no network needed.
 
 ## Web dashboard
 
@@ -482,6 +533,9 @@ waits for your yes.
   the journal) and don't enter the model's context.
 - Quick delivery test: `/help@yourbot` in the group answers even with privacy mode on.
 - Everyone in the group can read its replies (log excerpts, container names, DB stats).
+- For price and page alerts set from the group to arrive there, the group id must be in
+  `TELEGRAM_ALLOWED_CHATS`: that is where `install-host.sh` gets the chats it creates alert jobs for
+  ([Scheduled jobs](#scheduled-jobs)).
 - After editing `hermes/.env`: `sudo ./install-host.sh && sudo systemctl restart hermes-gateway`.
 
 ### Asking for data
@@ -523,8 +577,8 @@ Whatever it reads goes to the model provider — keep that in mind for financial
 ```bash
 sudo systemctl disable --now hermes-gateway hermes-egress
 sudo rm /etc/systemd/system/hermes-{gateway,egress}.service /etc/sudoers.d/hermes \
-  /usr/local/bin/homelab-manage.sh
-sudo rm -r /etc/hermes /etc/homelab-manage
+  /usr/local/bin/homelab-manage.sh /usr/local/bin/price-hunt /usr/local/bin/page-watch
+sudo rm -r /etc/hermes /etc/homelab-manage /usr/local/lib/{price-hunt,page-watch,agent-context}
 sudo systemctl daemon-reload
 sudo userdel -r hermes
 docker exec -it postgresdb psql -U root -d postgres -c 'DROP ROLE hermes_ro'

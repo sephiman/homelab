@@ -1,7 +1,9 @@
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import FakeAliExpress
+from conftest import FAMILY_CHAT, OWNER_CHAT, FakeAliExpress
 
 import price_hunt.cli as cli_module
 from price_hunt.aliexpress import AliExpressClient, Product
@@ -162,7 +164,7 @@ def test_watch_rm_stops_the_watch(aliexpress: FakeAliExpress, capsys: pytest.Cap
     assert code == 0
     assert out == "Removed watch #1.\n"
     _, listing, _ = run(capsys, "watch", "list")
-    assert listing == "No AliExpress price watches.\n"
+    assert listing == "No AliExpress price watches for 111111111.\n"
 
 
 def test_watch_add_takes_the_id_from_www_and_http_item_links(
@@ -550,3 +552,81 @@ def test_check_prunes_price_points_older_than_90_days(
 
     history = store.price_history(1, limit=10)
     assert all(price != 1600 for _, price in history)
+
+
+def test_check_delivers_each_watch_only_to_the_chat_that_asked_for_it(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    monkeypatch.setenv("HERMES_SESSION_CHAT_ID", FAMILY_CHAT)
+    _, added, _ = run(capsys, "watch", "add", "111", "14")
+    monkeypatch.delenv("HERMES_SESSION_CHAT_ID")
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+
+    _, owner_out, _ = run(capsys, "check", "--chat", OWNER_CHAT)
+    _, family_out, _ = run(capsys, "check", "--chat", FAMILY_CHAT)
+
+    assert f"Alerts go to Family ({FAMILY_CHAT})." in added
+    assert owner_out == ""
+    assert family_out.startswith("TARGET REACHED #1: Shelly Plus 1PM is €13.49")
+
+
+def test_watch_add_sends_alerts_to_a_chat_named_by_the_user(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+
+    code, out, _ = run(capsys, "watch", "add", "111", "14", "--chat", "family")
+    _, owner_list, _ = run(capsys, "watch", "list")
+    _, family_list, _ = run(capsys, "watch", "list", "--chat", "Family")
+    _, every_list, _ = run(capsys, "watch", "list", "--all")
+
+    assert code == 0
+    assert f"Alerts go to Family ({FAMILY_CHAT})." in out
+    assert (
+        owner_list
+        == f"No AliExpress price watches for {OWNER_CHAT}.\n1 more in other chats: watch list --all\n"
+    )
+    assert "#1 Shelly Plus 1PM" in family_list
+    assert f"alerts to Family ({FAMILY_CHAT})" in every_list
+
+
+def test_watch_add_refuses_a_chat_it_cannot_deliver_to(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+
+    code, _, err = run(capsys, "watch", "add", "111", "14", "--chat", "cousins")
+
+    assert code == 1
+    assert "no chat is named 'cousins'" in err
+    assert run(capsys, "watch", "list", "--all")[1] == "No AliExpress price watches.\n"
+
+
+def test_check_hands_watches_from_before_per_chat_alerts_to_the_default_chat(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "111", "14")
+    with closing(sqlite3.connect(load_settings().db_path)) as db, db:
+        db.execute("UPDATE watches SET chat_id = NULL")
+    aliexpress.offer("111", "13.49", "Shelly Plus 1PM")
+
+    _, family_out, _ = run(capsys, "check", "--chat", FAMILY_CHAT)
+    _, owner_out, _ = run(capsys, "check", "--chat", OWNER_CHAT)
+
+    assert family_out == ""
+    assert owner_out.startswith("TARGET REACHED #1")
+
+
+def test_check_reports_a_failure_once_in_each_chat_with_watches(
+    aliexpress: FakeAliExpress, capsys: pytest.CaptureFixture[str]
+) -> None:
+    aliexpress.offer("111", "15.20", "Shelly Plus 1PM")
+    run(capsys, "watch", "add", "111", "14")
+    run(capsys, "watch", "add", "111", "13", "--chat", FAMILY_CHAT)
+    aliexpress.error = "captcha"
+
+    outputs = [run(capsys, "check", "--chat", chat)[1] for chat in (OWNER_CHAT, FAMILY_CHAT) * 2]
+
+    assert [out.startswith("PRICE CHECK FAILED") for out in outputs] == [True, True, False, False]

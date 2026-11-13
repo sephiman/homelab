@@ -37,11 +37,16 @@ class WatchOutcome:
 
 
 def check_watches(
-    store: WatchStore, client: AliExpressClient, verifier: ListingVerifier | None, now: datetime
+    store: WatchStore,
+    client: AliExpressClient,
+    verifier: ListingVerifier | None,
+    now: datetime,
+    chat_id: str,
 ) -> tuple[list[Finding], PriceHuntError | None]:
+    """Checks the watches of one chat: each chat's scheduled job delivers its own findings."""
     findings: list[Finding] = []
     first_error: PriceHuntError | None = None
-    for index, watch in enumerate(store.all()):
+    for index, watch in enumerate(store.all(chat_id)):
         if index:
             client.pace()
         try:

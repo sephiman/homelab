@@ -1,0 +1,3 @@
+#!/bin/sh
+# Installed as /usr/local/bin/page-watch; the packages live root-owned in /usr/local/lib/{page-watch,agent-context}.
+PYTHONPATH=/usr/local/lib/page-watch:/usr/local/lib/agent-context exec python3 -P -m page_watch "$@"
