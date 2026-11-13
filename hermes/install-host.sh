@@ -169,7 +169,8 @@ unhealthy containers, projects with many errors, security updates, projects with
 containers with a newer image, media health or stuck downloads, HA safety alerts, disabled
 automations, batteries below 20%); never list what is fine. If nothing needs a look, reply with
 one line saying all is fine. For commits to pull or newer images, name the project so the user
-can ask you to update it. Never invent data that is not in the output.'
+can ask you to update it. You have no tools in this run; never invent data that is not in the
+output.'
 
 readonly CAPACITY_REPORT_PROMPT='Write a concise weekly storage and capacity summary from the Script Output above (under 10 lines):
 highlight filesystems above 70%, Docker reclaimable space, and the largest Postgres databases.

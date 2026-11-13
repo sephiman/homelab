@@ -808,21 +808,24 @@ daily_report() {
   echo "=== Home Assistant: low batteries"
   if [[ -r "$HA_AUTH_HEADER_FILE" ]]; then
     local ha_states_json
-    ha_states_json="$(ha_get states)"
-    jq -r '.[]
-      | select(.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20)
-      | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json" | head -n 40
-    echo "=== Home Assistant: safety & disabled automations"
-    {
+    if ha_states_json="$(ha_get states 2>&1)"; then
       jq -r '.[]
-        | select((.entity_id | startswith("binary_sensor."))
-            and (.attributes.device_class | IN("smoke", "gas", "moisture", "carbon_monoxide", "tamper"))
-            and .state == "on")
-        | ["ALERT", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
-      jq -r '.[]
-        | select(.entity_id | startswith("automation.") and .state == "off")
-        | ["OFF", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
-    } | head -n 40
+        | select(.attributes.device_class == "battery" and (.state | tonumber? // 100) < 20)
+        | [.entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json" | head -n 40
+      echo "=== Home Assistant: safety & disabled automations"
+      {
+        jq -r '.[]
+          | select((.entity_id | startswith("binary_sensor."))
+              and (.attributes.device_class | IN("smoke", "gas", "moisture", "carbon_monoxide", "tamper"))
+              and .state == "on")
+          | ["ALERT", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
+        jq -r '.[]
+          | select((.entity_id | startswith("automation.")) and .state == "off")
+          | ["OFF", .entity_id, .state, (.attributes.friendly_name // "")] | @tsv' <<<"$ha_states_json"
+      } | head -n 40
+    else
+      echo "Home Assistant unreachable: $ha_states_json"
+    fi
   else
     echo "not configured"
   fi
