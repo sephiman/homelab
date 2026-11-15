@@ -12,6 +12,9 @@ readonly TIMEZONE=Europe/Madrid
 # Crypto prices refresh hourly, ETF/stock prices once a night on business days.
 readonly CRYPTO_STALE_HOURS=3
 readonly EQUITY_STALE_DAYS=4
+readonly STATE_DIR="${HERMES_HOME:-${HOME:-/home/hermes}/.hermes}/state"
+readonly STATE_FILE="$STATE_DIR/holdings-report-$HOUSEHOLD.tsv"
+readonly TODAY="$(TZ="$TIMEZONE" date +%F)"
 
 # Rows: `household-missing`, `held <count>`, `block <crypto|etf-stocks|total> <today> <yesterday>`,
 # `closes <today's ETF/stock close date> <yesterday's>`, `unpriced <symbol>` (left out of the totals), `stale <symbol> <price date or time>`.
@@ -90,8 +93,33 @@ WHERE label = 'today' AND value IS NOT NULL
 SQL
 }
 
+# Last saved report before today: '<YYYY-MM-DD HH:MM>\t<crypto>\t<etf-stocks>\t<total>' (empty if none).
+previous_state() {
+  [ -s "$STATE_FILE" ] || return 0
+  awk -v today="$TODAY " 'index($0, today) != 1 { last = $0 } END { if (last != "") print last }' "$STATE_FILE"
+}
+
+# Saves today's totals, replacing any earlier entry from today.
+save_state() {
+  mkdir -p "$STATE_DIR"
+  local tmp
+  tmp="$(mktemp "$STATE_DIR/.holdings-report.XXXXXX")"
+  {
+    if [ -f "$STATE_FILE" ]; then
+      awk -v today="$TODAY " 'index($0, today) != 1' "$STATE_FILE"
+    fi
+    printf '%s %s\t%s\t%s\t%s\n' "$TODAY" "$(TZ="$TIMEZONE" date +%H:%M)" "$1" "$2" "$3"
+  } >"$tmp"
+  mv "$tmp" "$STATE_FILE"
+}
+
+block_today() {
+  awk -F'\t' -v block="$1" '$1 == "block" && $2 == block { print $3 }' <<<"$valuation"
+}
+
 format_report() {
-  awk -F'\t' -v household="$HOUSEHOLD" -v now="$(TZ="$TIMEZONE" date '+%Y-%m-%d %H:%M %Z')" '
+  local prev="${1:-}"
+  awk -F'\t' -v household="$HOUSEHOLD" -v now="$(TZ="$TIMEZONE" date '+%Y-%m-%d %H:%M %Z')" -v prev="$prev" '
     $1 == "household-missing" { missing = 1 }
     $1 == "held" { held = $2 }
     $1 == "block" { today[$2] = $3; yesterday[$2] = $4 }
@@ -110,6 +138,23 @@ format_report() {
         pct = (yesterday[b] != 0) ? sprintf(" (%+.2f%%)", 100 * change / yesterday[b]) : ""
         printf "%s\ttoday %.2f\tyesterday %.2f\tchange %+.2f%s%s\n", b, today[b], yesterday[b], change, pct, (b == "etf-stocks") ? closes : ""
       }
+      if (prev != "") {
+        split(prev, p, "\t")
+        prev_val["crypto"] = p[2]
+        prev_val["etf-stocks"] = p[3]
+        prev_val["total"] = p[4]
+        prev_lines = ""
+        for (i = 1; i <= n; i++) {
+          b = blocks[i]
+          if (!(b in today) || prev_val[b] == "") continue
+          d = today[b] - prev_val[b]
+          pct = (prev_val[b] != 0) ? sprintf(" (%+.2f%%)", 100 * d / prev_val[b]) : ""
+          prev_lines = prev_lines sprintf("%s\t%.2f\t%+.2f%s\n", b, today[b], d, pct)
+        }
+        if (prev_lines != "") {
+          printf "=== vs the previous report (%s, same time of day)\n%s", p[1], prev_lines
+        }
+      }
       if (warnings != "") printf "=== warnings\n%s", warnings
     }
   '
@@ -119,4 +164,11 @@ if ! valuation="$(holdings_valuation 2>&1)"; then
   printf '=== Shared Ledger holdings of %s: the query failed\n%s\n' "$HOUSEHOLD" "$valuation"
   exit 0
 fi
-format_report <<<"$valuation"
+
+prev="$(previous_state)"
+format_report "$prev" <<<"$valuation"
+
+held="$(awk -F'\t' '$1 == "held" { print $2 }' <<<"$valuation")"
+if [ "${held:-0}" -gt 0 ]; then
+  save_state "$(block_today crypto)" "$(block_today etf-stocks)" "$(block_today total)"
+fi

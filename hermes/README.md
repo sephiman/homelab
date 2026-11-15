@@ -289,7 +289,11 @@ SELL lots traded up to that day × latest price up to that day × FX into the ho
 ETF/stock prices are taken one day earlier (yesterday's close vs the day before's, dates shown in
 the output): at 08:10 there is no close for today yet, so each session's move shows up exactly once,
 the morning after (Tuesday to Saturday), and Sunday and Monday show no ETF/stock change.
-Snapshots aren't used (Casa takes them monthly). It flags crypto prices older than 3 hours, ETF/stock
+Snapshots aren't used (Casa takes them monthly). Because Shared Ledger overwrites crypto's daily
+row in `price_history` on every hourly refresh (leaving only yesterday's closing price), the script
+also saves each day's totals to `~/.hermes/state/holdings-report-<household>.tsv` and prints a
+`vs the previous report` section comparing today's run against the previous saved report at the
+same time of day. It flags crypto prices older than 3 hours, ETF/stock
 prices older than 4 days and holdings with no price or FX rate; while nothing is held it sends
 nothing. All jobs follow `timezone: Europe/Madrid` in `config.yaml`, whatever the host clock says.
 

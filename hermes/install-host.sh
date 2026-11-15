@@ -179,6 +179,10 @@ You have no tools in this run; never invent figures that are not in the output.'
 readonly HOLDINGS_REPORT_PROMPT='Write the daily portfolio report of the Shared Ledger household from the Script Output above,
 in euros, in 4-5 lines: crypto, ETF+stocks and the total, each with today'"'"'s value and its change
 versus yesterday with sign and percentage; for ETF+stocks name the two closing dates it compares.
+If the output includes a "vs the previous report" section, use that as the headline change for
+crypto (naming the previous report date/time it compares against, e.g. yesterday at the same time)
+and leave the change versus yesterday'"'"'s close as secondary context; mention the total vs the
+previous report too if useful.
 If the output has warnings (stale or missing prices),
 say so on one trailing line. If the output says the query failed, report the error. Never invent
 figures that are not in the output.'
