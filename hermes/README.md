@@ -16,7 +16,7 @@ dangerous-command checks on container backends.
 | Allowed | How |
 |---------|-----|
 | Project list, container list, per-project status and logs, `git-status` (pending commits), filtered `inspect`, `docker.service` journal, which database each container uses (`databases`) | `sudo -n homelab-manage.sh <action>` — the only sudo rule `hermes` has; `databases` prints only the database name taken from a container's env (`DB_NAME`, `POSTGRES_DB`, or the path of a Postgres URL) |
-| `restart` / `update` (git pull + pull + up --build) of any Compose project, `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
+| `restart` / `update` (git pull + pull + up --build, whole project or one service) of any Compose project, `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
 | Home Assistant: entity states (`ha-states`, `ha-state`), history (`ha-history`), logbook (`ha-logbook`), automations and their definitions (`ha-automations`, `ha-automation`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs, GPS coordinates and webhook ids are filtered out |
 | Backups (`backup-status`): latest local backup, checksum check, backup log, copies on Google Drive | Wrapper reads the archives folder as root and runs `rclone` inside the `backup` container; the rclone config never leaves it |
@@ -61,8 +61,9 @@ can't restart anything. To switch a toolset off entirely, list it under
 - **Logs are attacker-controlled text.** Nginx access logs carry strings from the internet; a
   crafted line could try to steer the agent into a restart. That is why the wrapper is so narrow.
 - **`update` pulls the whole git checkout** the project lives in (`git pull --ff-only` as the
-  folder's owner; skipped if it isn't a checkout), then rebuilds that one project. Hermes cannot
-  push or edit any checkout — it cannot even read them.
+  folder's owner; skipped if it isn't a checkout), then pulls and rebuilds that one project (or
+  only the named service when `update <project> <service>` is used). Hermes cannot push or edit
+  any checkout — it cannot even read them.
 - **Compose runs as the project folder's owner**, who must be in the `docker` group (you are, if you
   run `docker compose` without sudo). That keeps everything it writes — `~/.docker/buildx`, build
   output — owned by you, and uses your registry logins.
@@ -277,7 +278,7 @@ yet (and whether `git pull --ff-only` can apply them), and containers on a float
 versions (`1.37.4`) count as deliberate pins and aren't checked. The image check asks each
 registry anonymously with HEAD requests, which don't count against Docker Hub's pull limit, so
 private images show up as "could not check". Nothing is pulled or redeployed by the report: ask
-Hermes to `update <project>` for that.
+Hermes to `update <project> [service]` for that.
 
 The summary only mentions what needs a look; unavailable Home Assistant entities are left out as
 noise (Zigbee/Wi-Fi drops), low batteries are kept.

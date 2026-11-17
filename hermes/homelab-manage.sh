@@ -61,7 +61,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
   code-ls <project> [path]     files committed in the project's folder (git HEAD)
   code-show <project> <path>   one committed file (max 200 KB; secret-looking files refused)
   code-grep <project> <text>   committed lines containing text (fixed string, max 300 lines)
-  update  <project>            git pull --ff-only (if a git checkout), compose pull, up -d --build
+  update  <project> [service]  git pull --ff-only (if a git checkout), compose pull, up -d --build
   restart-docker               systemctl restart docker (restarts everything)
   ha-states [domain]           Home Assistant entities with state (optionally one domain: light, sensor…)
   ha-state <entity_id>         one Home Assistant entity with its attributes (secrets/location hidden)
@@ -981,12 +981,17 @@ case "$action" in
     git_status
     ;;
   update)
-    [[ $# -eq 1 ]] || usage
+    [[ $# -eq 1 || $# -eq 2 ]] || usage
     resolve_project "$1"
+    service_args=()
+    if [[ $# -eq 2 ]]; then
+      [[ "$2" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]] || die "invalid service name '$2'"
+      service_args=("$2")
+    fi
     hold_lock
     git_pull
-    compose "$1" pull --ignore-buildable
-    compose "$1" up -d --build
+    compose "$1" pull --ignore-buildable "${service_args[@]}"
+    compose "$1" up -d --build "${service_args[@]}"
     ;;
   restart-docker)
     [[ $# -eq 0 ]] || usage

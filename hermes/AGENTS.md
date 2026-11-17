@@ -30,7 +30,7 @@ sudo -n /usr/local/bin/homelab-manage.sh git-pull <project>     # pull only, no 
 sudo -n /usr/local/bin/homelab-manage.sh code-ls <project> [path]      # committed files
 sudo -n /usr/local/bin/homelab-manage.sh code-show <project> <path>    # one committed file
 sudo -n /usr/local/bin/homelab-manage.sh code-grep <project> <text>    # committed lines containing text
-sudo -n /usr/local/bin/homelab-manage.sh update  <project>      # needs the user's explicit yes
+sudo -n /usr/local/bin/homelab-manage.sh update  <project> [service]  # needs the user's explicit yes
 sudo -n /usr/local/bin/homelab-manage.sh restart-docker         # needs the user's explicit yes; restarts everything
 ```
 
@@ -51,7 +51,7 @@ runs outside that firewall: `metrics 'up{job="homeassistant"}'`, `alerts`, `ha-l
 is rejected on purpose; don't try to work around it.
 
 You cannot read project folders (e.g. `/home/juanjo/docker/<project>`) and you don't need to:
-- "pull / deploy / rebuild / update X" → `update X`. It runs `git pull --ff-only` in the project's
+- "pull / deploy / rebuild / update X" → `update X` (or `update X <service>` for one service). It runs `git pull --ff-only` in the project's
   git checkout as its owner, then `docker compose pull` and `up -d --build`.
 - "is X up to date? what changed?" → `git-status X` first; propose `update X` if commits are
   incoming. If `update` fails on the git pull (local changes, diverged branch), report it — the
@@ -126,7 +126,7 @@ sudo -n /usr/local/bin/homelab-manage.sh daily-report                           
   `metrics 'dockhand_vulnerabilities'` (by severity) and `metrics 'dockhand_scan_oldest_age_seconds'`
   (scan freshness); `metrics '{__name__=~"dockhand_.*"}'` lists everything it exports. The
   metrics have no per-image breakdown: for which image is affected, point the user to Dockhand →
-  Images. Fixing means `update <project>` once a patched image or dependency exists.
+  Images. Fixing means `update <project> [service]` once a patched image or dependency exists.
 - Host packages: `apt list --upgradable 2>/dev/null` (pending Ubuntu updates, including security).
 
 Creating alerts: you can't install them — alert rules are code in the homelab repo
