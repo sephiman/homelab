@@ -61,7 +61,8 @@ usage: sudo -n homelab-manage.sh <action> [args]
   code-ls <project> [path]     files committed in the project's folder (git HEAD)
   code-show <project> <path>   one committed file (max 200 KB; secret-looking files refused)
   code-grep <project> <text>   committed lines containing text (fixed string, max 300 lines)
-  update  <project> [service]  git pull --ff-only (if a git checkout), compose pull, up -d --build
+  update  <project> [service]         git pull --ff-only (if a git checkout), compose pull, up -d --build
+  update-images <project> [service]   git pull --ff-only (if a git checkout), compose pull, up -d (no build)
   restart-docker               systemctl restart docker (restarts everything)
   ha-states [domain]           Home Assistant entities with state (optionally one domain: light, sensor…)
   ha-state <entity_id>         one Home Assistant entity with its attributes (secrets/location hidden)
@@ -798,7 +799,7 @@ daily_report() {
   apt list --upgradable 2>/dev/null | tail -n +2 | wc -l | sed 's/$/ total/' || true
   echo "=== projects with commits to pull (update <project> pulls and rebuilds)"
   pending_git_updates | grep . || echo "none"
-  echo "=== containers on floating tags with a newer image (update <project> pulls and recreates)"
+  echo "=== containers on floating tags with a newer image (update-images <project> pulls and recreates without building)"
   pending_image_updates || true
   echo "=== media"
   media_health 2>&1 || true
@@ -902,6 +903,26 @@ hold_lock() {
   flock -w 600 9 || die "another restart/update is still running"
 }
 
+# Pulls git (if a checkout) and redeploys; mode is "build" or "images" (pull + up -d, no build).
+update_project() {
+  local mode="$1" project="$2"
+  shift 2
+  resolve_project "$project"
+  local service_args=() pull_args=() up_args=()
+  if [[ $# -eq 1 ]]; then
+    [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]] || die "invalid service name '$1'"
+    service_args=("$1")
+  fi
+  if [[ "$mode" == build ]]; then
+    pull_args=(--ignore-buildable)
+    up_args=(--build)
+  fi
+  hold_lock
+  git_pull
+  compose "$project" pull "${pull_args[@]}" "${service_args[@]}"
+  compose "$project" up -d "${up_args[@]}" "${service_args[@]}"
+}
+
 [[ $# -ge 1 ]] || usage
 
 logger -t homelab-manage -- "by=${SUDO_USER:-$USER} args=$*"
@@ -982,16 +1003,11 @@ case "$action" in
     ;;
   update)
     [[ $# -eq 1 || $# -eq 2 ]] || usage
-    resolve_project "$1"
-    service_args=()
-    if [[ $# -eq 2 ]]; then
-      [[ "$2" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]] || die "invalid service name '$2'"
-      service_args=("$2")
-    fi
-    hold_lock
-    git_pull
-    compose "$1" pull --ignore-buildable "${service_args[@]}"
-    compose "$1" up -d --build "${service_args[@]}"
+    update_project build "$@"
+    ;;
+  update-images)
+    [[ $# -eq 1 || $# -eq 2 ]] || usage
+    update_project images "$@"
     ;;
   restart-docker)
     [[ $# -eq 0 ]] || usage
