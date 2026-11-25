@@ -108,7 +108,7 @@ def web(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeWeb]:
     (tmp_path / "channel_directory.json").write_text(
         json.dumps({"telegram": [{"id": FAMILY_CHAT, "name": "Family", "type": "group"}]})
     )
-    model = ChatModel(LlmConfig(f"{fake.url}/v1", "test-model", "key"), session_prefix="page-watch")
+    model = ChatModel(LlmConfig(f"{fake.url}/v1", "test-model", "key"))
     monkeypatch.setattr(cli_module, "build_judge", lambda: PageJudge(model))
     monkeypatch.setattr(cli_module, "local_zone", lambda: ZoneInfo("Europe/Madrid"))
     monkeypatch.setattr(cli_module, "now_utc", lambda: fake.now)

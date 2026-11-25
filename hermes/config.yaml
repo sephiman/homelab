@@ -6,42 +6,9 @@
 # base_url is pinned too: managed keys merge per leaf, so a base_url left in ~hermes/.hermes/config.yaml
 # by an earlier provider would otherwise be used with this one (requests went to OpenRouter's URL).
 model:
-  default: deepseek-v4.1-flash
-  provider: opencode-go
-  base_url: https://opencode.ai/zen/go/v1
-
-# `/model <alias>` in Telegram switches the current chat. Each Go model has its own usage budget,
-# so spreading work across them spares the default's. base_url pinned for the same reason as above.
-model_aliases:
-  flash:
-    model: deepseek-v4.1-flash
-    provider: opencode-go
-    base_url: https://opencode.ai/zen/go/v1
-  # Hard diagnoses only: its budget is $15/month.
-  pro:
-    model: deepseek-v4-pro
-    provider: opencode-go
-    base_url: https://opencode.ai/zen/go/v1
-  fast:
-    model: glm-5.3-flash
-    provider: opencode-go
-    base_url: https://opencode.ai/zen/go/v1
-
-# Background tasks default to the main model; these move off its budget. The curator runs the
-# self-improvement review that once saved wrong memories/skills, so it gets the stronger model.
-auxiliary:
-  compression:
-    provider: opencode-go
-    model: glm-5.3-flash
-    base_url: https://opencode.ai/zen/go/v1
-  title_generation:
-    provider: opencode-go
-    model: glm-5.3-flash
-    base_url: https://opencode.ai/zen/go/v1
-  curator:
-    provider: opencode-go
-    model: deepseek-v4-pro
-    base_url: https://opencode.ai/zen/go/v1
+  default: gemini-4-hydrogen
+  provider: custom:gemini
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai
 
 timezone: Europe/Madrid
 
@@ -77,19 +44,18 @@ approvals:
     - '*.env*'
     - '*.pgpass*'
 
-# Groq has no built-in Hermes provider; it's an OpenAI-compatible custom one (`custom:groq`).
+# Gemini through its OpenAI-compatible endpoint (`custom:gemini`), so price-hunt and page-watch can
+# call the same model. Groq has no built-in Hermes provider either (`custom:groq`).
 providers:
+  gemini:
+    api: https://generativelanguage.googleapis.com/v1beta/openai
+    key_env: GEMINI_API_KEY
   groq:
     api: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY
 
-# Tried in order when the primary fails. Haiku first: Go usage windows are per model, so it covers a
-# spent DeepSeek window with the same Go key. OpenRouter covers a Go outage; its key goes in
-# FALLBACK_API_KEY. Hermes sends claude-* over Go's Anthropic endpoint, deriving it from this base_url.
+# Tried when the primary fails (Gemini quota or outage). Its key goes in FALLBACK_API_KEY.
 fallback_providers:
-  - provider: opencode-go
-    model: claude-haiku-5-5
-    base_url: https://opencode.ai/zen/go/v1
   - provider: openrouter
     model: nvidia/nemotron-3-ultra-550b-a55b:free
 

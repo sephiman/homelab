@@ -222,7 +222,7 @@ a file there, commit, pull on the host, then reload Prometheus
 described in [monitoring/README.md](../monitoring/README.md#alerts--telegram).
 
 Continuous checking stays with Prometheus: the [alert diagnosis job](#scheduled-jobs) only calls
-the model when one of its alerts starts firing, so it barely touches the Go usage limits.
+the model when one of its alerts starts firing, so it barely touches the Gemini quota.
 
 ## Backups and media
 
@@ -432,16 +432,18 @@ as much as its price.
 
 | Provider (`model.provider`) | Model id | Cost | Catch |
 |---|---|---|---|
-| OpenCode Go (`opencode-go`) | `deepseek-v4.1-flash` *(default)*, `claude-haiku-5-5` *(first fallback)*; any id from `https://opencode.ai/inference/go/v1/models` | $10/month subscription; this model is capped at $100 of usage a month (20% per 5 h, 50% per week), billed at $0.15–0.30 per 1M input tokens | DeepSeek models need **Settings › Privacy › Regions → Global** in the OpenCode console (default is Europe + US only), so prompts may be served outside the EU/US. Go is meant for coding agents and watches for abuse; an ops bot is light traffic, but it isn't what Go is sold for |
-| OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(second fallback)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
-| Google Gemini (`gemini`) | `gemini-3.8-flash`, `gemini-2.5-flash` | Free tier | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
-| OpenCode Zen (`opencode-zen`) | `glm-5.3-flash`, `deepseek-v4.1-flash` ($0.30 / $1.20) | $0.15 / $0.50 per 1M tokens in/out, prepaid credit | Paid only from Hermes: Zen's `*-free` models answer `403 … can only be used from within OpenCode` |
+| Google Gemini, OpenAI-compatible (`custom:gemini`) | `gemini-4-hydrogen` *(default)*; any id from `https://generativelanguage.googleapis.com/v1beta/openai/models` | Free tier, or paid per token on a billed project | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
+| OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(fallback)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
 
-Prices and free tiers change; check [OpenRouter models](https://openrouter.ai/models?max_price=0),
-[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing),
-[OpenCode Zen](https://opencode.ai/docs/zen/) and [OpenCode Go](https://opencode.ai/docs/go/). One OpenRouter key also covers paid models, so
+Prices and free tiers change; check [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
+and [OpenRouter models](https://openrouter.ai/models?max_price=0). One OpenRouter key also covers paid models, so
 moving off a free model is just a different model id. Small models are weaker at multi-step tool use:
 if the bot calls the wrapper wrongly or stops asking before restarts, try a stronger one.
+
+Gemini runs as the custom provider `gemini` declared under `providers:` in `config.yaml`, pointed at
+Google's OpenAI-compatible endpoint rather than Hermes' native `gemini` provider: that way
+`price-hunt` and `page-watch` (which only speak OpenAI-style `/chat/completions`) use the same model
+and key as the bot.
 
 To switch, edit `model:` in this folder's `config.yaml` (the key always goes in `LLM_API_KEY`):
 
@@ -460,46 +462,28 @@ sent with the new one's key — the symptom is `401 Missing Authentication heade
 
 `hermes model` / `hermes config set` refuse to change these keys: `config.yaml` is installed as
 Hermes' managed config (`/etc/hermes/config.yaml`). `install-host.sh` reads the provider from it
-and saves `LLM_API_KEY` as that provider's variable. It knows `opencode-zen`, `opencode-go`, `gemini`, `openrouter`, `anthropic`,
-`openai-api` and `deepseek`; for any other provider it stops and asks you to put the provider's own
-key variable in `hermes/.env` instead (any variable there is passed through as-is).
+and saves `LLM_API_KEY` as that provider's variable. It knows `gemini`, `custom:gemini`, `openrouter`,
+`anthropic`, `openai-api`, `deepseek` and `custom:groq`; for any other provider it stops and asks you
+to put the provider's own key variable in `hermes/.env` instead (any variable there is passed through as-is).
 
 `/model <id>` in Telegram switches only the current chat. Cloud APIs need nothing else; a local model (Ollama on the LAN or host) is blocked by the
 egress firewall until you add a rule for it in `hermes-egress.nft`.
 
-### Aliases and background tasks
-
-Each Go model has its own usage budget (see the [Go model table](https://opencode.ai/docs/go/)), so
-`config.yaml` spreads the work over three of them. They all use the same Go key, so nothing more
-goes in `.env`:
-
-| Alias (`/model <alias>`) | Model | Use it for |
-|---|---|---|
-| `flash` *(default)* | `deepseek-v4.1-flash` | Everyday chat; the largest budget |
-| `pro` | `deepseek-v4-pro` | An incident that doesn't add up, reviewing a compose file — its budget is small ($15/month) |
-| `fast` | `glm-5.3-flash` | Quick questions when `flash`'s 5-hour window is running low |
-
-Under `auxiliary:`, context compression and session titles run on `glm-5.3-flash`, and the curator
-(the self-improvement review that writes memories and skills) runs on `deepseek-v4-pro`. A task
-whose provider or key doesn't resolve falls back to OpenRouter and logs a warning in
-`~hermes/.hermes/logs/errors.log`. Check there after changing any of them.
+Background tasks (context compression, session titles, the curator that writes memories and
+skills) run on the main model. A task whose provider or key doesn't resolve falls back to
+OpenRouter and logs a warning in `~hermes/.hermes/logs/errors.log`.
 
 ### Fallback model
 
 When the primary fails (rate limit, outage), Hermes tries the entries of `fallback_providers` in
-`config.yaml` in order and goes back to the primary once its limit resets:
+`config.yaml` in order and goes back to the primary once its limit resets. The only entry is
+**OpenRouter's free `nvidia/nemotron-3-ultra-550b-a55b:free`**, within OpenRouter's 50 free
+requests a day.
 
-1. **Go's `claude-haiku-5-5`**, with the same Go key. Go's usage windows (5-hour, weekly, monthly)
-   are per model, so a spent DeepSeek window leaves Haiku's untouched. Hermes sends `claude-*`
-   models over Go's Anthropic endpoint by itself; the pinned `base_url` stays the `/zen/go/v1` one.
-2. **OpenRouter's free `nvidia/nemotron-3-ultra-550b-a55b:free`**, for when Go itself is down or the
-   key is spent, within OpenRouter's 50 free requests a day.
-
-The last entry must be a **different provider** than the primary: an outage or a spent key takes
+The fallback must be a **different provider** than the primary: an outage or a spent key takes
 down every model of that provider, and OpenRouter's `free-models-per-day` limit is per account.
-Gemini's free tier (`provider: gemini`, `gemini-3.5-flash-lite`) also works there, but its
-content **is used to improve Google's products**. Groq's free plan doesn't: its tokens-per-minute
-cap is smaller than a single Hermes request, which fails with `413 Request payload too large`.
+Groq's free plan doesn't work there: its tokens-per-minute cap is smaller than a single Hermes
+request, which fails with `413 Request payload too large`.
 
 Change the fallbacks in this folder's `config.yaml` (`fallback_providers:`). Entries on the primary's
 provider use `LLM_API_KEY`; the key of the first other provider goes in `FALLBACK_API_KEY`, which

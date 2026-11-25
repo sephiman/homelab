@@ -2,7 +2,6 @@ import json
 import os
 import urllib.error
 import urllib.request
-import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,8 +12,7 @@ from agent_context.managed_config import MANAGED_CONFIG, read_managed_config, se
 # Only providers whose API serves OpenAI-style /chat/completions with a Bearer key; native
 # Anthropic and Gemini endpoints can't, so they stay out and callers run without a model.
 _PROVIDER_KEY_VARS = {
-    "opencode-zen": "OPENCODE_ZEN_API_KEY",
-    "opencode-go": "OPENCODE_GO_API_KEY",
+    "custom:gemini": "GEMINI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
     "openai-api": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
@@ -34,9 +32,8 @@ class LlmConfig:
 
 
 class ChatModel:
-    def __init__(self, config: LlmConfig, session_prefix: str, timeout_seconds: float = 30) -> None:
+    def __init__(self, config: LlmConfig, timeout_seconds: float = 30) -> None:
         self._config = config
-        self._session_prefix = session_prefix
         self._timeout = timeout_seconds
 
     def complete(self, system: str, user: str) -> str:
@@ -57,7 +54,6 @@ class ChatModel:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._config.api_key}",
                 "User-Agent": "OpenAI/Python 1.99.1",
-                "x-opencode-session": f"{self._session_prefix}-{uuid.uuid4().hex}",
             },
             method="POST",
         )

@@ -29,4 +29,3 @@ def test_listing_verifier_asks_the_model_and_reads_matching_ids(
     assert "Product:" in messages[1]["content"]
     assert aliexpress.llm_auth == ["Bearer secret", "Bearer secret"]
     assert aliexpress.llm_headers[0]["user-agent"] == "OpenAI/Python 1.99.1"
-    assert aliexpress.llm_headers[0]["x-opencode-session"].startswith("price-hunt-")

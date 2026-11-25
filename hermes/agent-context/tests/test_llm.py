@@ -11,9 +11,9 @@ from agent_context.llm import ChatModel, LlmConfig, LlmError, load_llm_config
 CONFIG = """\
 timezone: Europe/Madrid
 model:
-  default: deepseek-v4.1-flash
-  provider: opencode-go
-  base_url: https://opencode.ai/zen/go/v1
+  default: gemini-4-hydrogen
+  provider: custom:gemini
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai
 
 model_aliases:
   flash:
@@ -27,14 +27,16 @@ def managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     config.write_text(CONFIG)
     home = tmp_path / "home"
     home.mkdir()
-    (home / ".env").write_text("OPENCODE_GO_API_KEY=go-key\n")
+    (home / ".env").write_text("GEMINI_API_KEY=gemini-key\n")
     monkeypatch.setenv("HERMES_HOME", str(home))
     return config
 
 
 def test_load_llm_config_reads_the_managed_model(managed: Path) -> None:
     assert load_llm_config(managed) == LlmConfig(
-        base_url="https://opencode.ai/zen/go/v1", model="deepseek-v4.1-flash", api_key="go-key"
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        model="gemini-4-hydrogen",
+        api_key="gemini-key",
     )
 
 
@@ -101,7 +103,7 @@ def completions() -> Iterator[tuple[FakeCompletions, str]]:
 
 def test_chat_model_sends_the_prompt_and_returns_the_reply(completions: tuple[FakeCompletions, str]) -> None:
     fake, url = completions
-    model = ChatModel(LlmConfig(url, "test-model", "secret"), session_prefix="page-watch")
+    model = ChatModel(LlmConfig(url, "test-model", "secret"))
 
     assert model.complete("system text", "user text") == "hello"
     assert fake.bodies[0]["model"] == "test-model"
@@ -110,7 +112,6 @@ def test_chat_model_sends_the_prompt_and_returns_the_reply(completions: tuple[Fa
         {"role": "user", "content": "user text"},
     ]
     assert fake.headers[0]["authorization"] == "Bearer secret"
-    assert fake.headers[0]["x-opencode-session"].startswith("page-watch-")
 
 
 def test_chat_model_rejects_a_reply_without_content(completions: tuple[FakeCompletions, str]) -> None:
@@ -118,4 +119,4 @@ def test_chat_model_rejects_a_reply_without_content(completions: tuple[FakeCompl
     fake.reply = {"error": "overloaded"}
 
     with pytest.raises(LlmError, match="no message content"):
-        ChatModel(LlmConfig(url, "m", "k"), session_prefix="x").complete("s", "u")
+        ChatModel(LlmConfig(url, "m", "k")).complete("s", "u")

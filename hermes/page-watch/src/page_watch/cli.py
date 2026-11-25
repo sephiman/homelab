@@ -25,7 +25,7 @@ MIN_PAGE_CHARS = 200
 def build_judge() -> PageJudge | None:
     """Hermes' own model reads the pages; None when it isn't an OpenAI-compatible provider."""
     config = load_llm_config()
-    return PageJudge(ChatModel(config, session_prefix="page-watch")) if config is not None else None
+    return PageJudge(ChatModel(config)) if config is not None else None
 
 
 def build_fetcher() -> PageFetcher:

@@ -25,7 +25,7 @@ _NAME_SYSTEM_PROMPT = (
 
 class ListingVerifier:
     def __init__(self, config: LlmConfig, timeout_seconds: float = 30) -> None:
-        self._model = ChatModel(config, session_prefix="price-hunt", timeout_seconds=timeout_seconds)
+        self._model = ChatModel(config, timeout_seconds=timeout_seconds)
 
     def matching_ids(self, query: str, offers: Sequence[Product]) -> set[str]:
         """The ids of *offers* the model accepts as the exact product named by *query*."""

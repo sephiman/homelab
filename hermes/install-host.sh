@@ -11,9 +11,8 @@ readonly HOMELAB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly HERMES_BIN="$HERMES_HOME_DIR/.local/bin/hermes"
 # hermes/.env holds one generic LLM_API_KEY; Hermes reads it from the provider's own variable.
 declare -rA PROVIDER_KEY_VARS=(
-  [opencode-zen]=OPENCODE_ZEN_API_KEY
-  [opencode-go]=OPENCODE_GO_API_KEY
   [gemini]=GEMINI_API_KEY
+  [custom:gemini]=GEMINI_API_KEY
   [openrouter]=OPENROUTER_API_KEY
   [anthropic]=ANTHROPIC_API_KEY
   [openai-api]=OPENAI_API_KEY
