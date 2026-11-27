@@ -81,8 +81,13 @@ usage: sudo -n homelab-manage.sh <action> [args]
   backup-status                last backup: files, checksums, size check, log, copies on Google Drive
   vpn-status                   gluetun health and its public IP vs. the host's (torrent leak check)
   media-health                 Sonarr/Radarr/Prowlarr health checks (indexers, download client…)
-  media-queue                  Sonarr/Radarr download queue with status and error messages
+  media-queue                  Sonarr/Radarr download queue (queue id first) with status and errors
   media-stuck                  Sonarr/Radarr downloads stuck pending/blocked import or with warnings
+  media-queue-remove <sonarr|radarr> <queue id> [blocklist]
+                               remove a download from the queue and qBittorrent (files deleted);
+                               blocklist = never grab that release again and search for another
+  media-import-preview <sonarr|radarr> <queue id>
+                               a download's files: matched episode/movie, quality, why each is rejected
   media-calendar [days]        upcoming Sonarr/Radarr releases (default 7 days, max 30)
   media-title <sonarr|radarr> <title>   library entry, missing episodes and grab/import history
   media-releases <radarr> <title> | <sonarr> <title> <season>
@@ -461,12 +466,70 @@ resolve_arr() {
 }
 
 # The key goes in through a file descriptor so it never appears in the process list.
-arr_get() {
-  local key
+arr_request() {
+  local method="$1" path="$2" key
   key="$(container_env_value "$ARR_CONTAINER" "$ARR_KEY_VAR")"
   [[ -n "$key" ]] || die "$ARR_CONTAINER has no $ARR_KEY_VAR in its env (media/.env)"
-  curl -fsS --max-time "${ARR_TIMEOUT:-20}" -H @<(printf 'X-Api-Key: %s\n' "$key") \
-    "$ARR_URL/api/$ARR_API/$1"
+  curl -fsS -X "$method" --max-time "${ARR_TIMEOUT:-20}" -H @<(printf 'X-Api-Key: %s\n' "$key") \
+    "$ARR_URL/api/$ARR_API/$path"
+}
+
+arr_get() {
+  arr_request GET "$1"
+}
+
+readonly ARR_QUEUE_QUERY="queue?pageSize=1000&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true"
+
+# One queue item as JSON; dies when the id isn't in the queue (any more).
+queue_item() {
+  local item
+  item="$(arr_get "$ARR_QUEUE_QUERY" | jq -c --argjson id "$1" '.records[] | select(.id == $id)')"
+  [[ -n "$item" ]] || die "no queue item $1 in $ARR_CONTAINER (run media-queue for current ids)"
+  echo "$item"
+}
+
+# jq: "Series S1E2" or "Movie" for a queue item.
+readonly JQ_QUEUE_LABEL='(.series.title // .movie.title // "?")
+  + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end)'
+
+# Removes the download from qBittorrent too (with its files); blocklisting also makes the app search
+# for another release. A season pack is one download behind several queue items, so all go.
+media_queue_remove() {
+  local app="$1" id="$2" blocklist="$3" item download_id
+  resolve_arr "$app"
+  item="$(queue_item "$id")"
+  download_id="$(jq -r '.downloadId // empty' <<<"$item")"
+  echo "removing from $app and qBittorrent (blocklist: $blocklist):"
+  arr_get "$ARR_QUEUE_QUERY" | jq -r --argjson id "$id" --arg dl "$download_id" "
+    .records[] | select(.id == \$id or (\$dl != \"\" and .downloadId == \$dl))
+    | \"  \(.id)\t\($JQ_QUEUE_LABEL)\t\(.title)\""
+  arr_request DELETE "queue/$id?removeFromClient=true&blocklist=$blocklist&skipRedownload=false" >/dev/null
+  echo "done"
+}
+
+# What a manual import would do with the download's files — the same check as the app's
+# Manual Import dialog, read-only.
+media_import_preview() {
+  local app="$1" id="$2" item download_id query
+  resolve_arr "$app"
+  item="$(queue_item "$id")"
+  download_id="$(jq -r '.downloadId // empty' <<<"$item")"
+  [[ -n "$download_id" ]] || die "queue item $id has no download id"
+  jq -r "\"\($JQ_QUEUE_LABEL): \(.title)\"" <<<"$item"
+  if [[ "$app" == radarr ]]; then
+    query="manualimport?downloadId=$download_id&movieId=$(jq -r '.movieId' <<<"$item")&filterExistingFiles=false"
+  else
+    query="manualimport?downloadId=$download_id&seriesId=$(jq -r '.seriesId' <<<"$item")&filterExistingFiles=false"
+  fi
+  ARR_TIMEOUT=60 arr_get "$query" | jq -r '
+    if length == 0 then "no files found in the download" else .[]
+    | [(.relativePath // .name // .path),
+       "\((.size // 0) / 1048576 | floor) MB",
+       (.quality.quality.name // "?"),
+       (if (.episodes // []) | length > 0 then (.episodes | map("S\(.seasonNumber)E\(.episodeNumber)") | join(","))
+        elif .movie then .movie.title else "unmatched" end),
+       ((.rejections // []) | map(if type == "object" then .reason else . end) | join(" | ") | if . == "" then "OK" else . end)]
+    | @tsv end'
 }
 
 media_health() {
@@ -484,7 +547,7 @@ media_stuck() {
   for app in sonarr radarr; do
     resolve_arr "$app"
     echo "--- $app"
-    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+    arr_get "$ARR_QUEUE_QUERY" |
       jq -r '
         [.records[] | select(
           .trackedDownloadState == "importPending"
@@ -493,7 +556,7 @@ media_stuck() {
           or (.errorMessage != null and .errorMessage != "")
         )]
         | if length == 0 then "none" else .[]
-          | [(.series.title // .movie.title // "?")
+          | [.id, (.series.title // .movie.title // "?")
              + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
              (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
              ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
@@ -526,57 +589,15 @@ media_queue() {
   for app in sonarr radarr; do
     resolve_arr "$app"
     echo "--- $app"
-    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
+    arr_get "$ARR_QUEUE_QUERY" |
       jq -r 'if .totalRecords == 0 then "empty" else .records[]
-        | [(.series.title // .movie.title // "?")
+        | [.id, (.series.title // .movie.title // "?")
            + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
            .status, (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"),
            (.timeleft // "-"), .title,
            ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
         | @tsv end'
   done
-}
-
-media_stuck() {
-  local app
-  for app in sonarr radarr; do
-    resolve_arr "$app"
-    echo "--- $app"
-    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
-      jq -r '
-        [.records[] | select(
-          .trackedDownloadState == "importPending"
-          or .trackedDownloadState == "importBlocked"
-          or (.trackedDownloadStatus != null and .trackedDownloadStatus != "ok")
-          or (.errorMessage != null and .errorMessage != "")
-        )]
-        | if length == 0 then "none" else .[]
-          | [(.series.title // .movie.title // "?")
-             + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
-             (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
-             ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
-          | @tsv end' || echo "unreachable"
-  done
-}
-
-media_calendar() {
-  local days="$1" start end
-  start="$(date -u +%F)"
-  end="$(date -u -d "+${days} days" +%F)"
-  resolve_arr sonarr
-  echo "--- sonarr ($start to $end)"
-  arr_get "calendar?start=$start&end=$end&includeSeries=true" |
-    jq -r 'if length == 0 then "none" else .[]
-      | [(.airDateUtc // "?")[0:16], (.series.title // "?"),
-         "S\(.seasonNumber)E\(.episodeNumber)", (.title // "")]
-      | @tsv end'
-  resolve_arr radarr
-  echo "--- radarr ($start to $end)"
-  arr_get "calendar?start=$start&end=$end" |
-    jq -r 'if length == 0 then "none" else .[]
-      | [((.digitalRelease // .physicalRelease // .inCinemas // "?")[0:10]),
-         .title, (if .hasFile then "downloaded" else "missing" end)]
-      | @tsv end'
 }
 
 # Prints the library id of the title, preferring an exact (case-insensitive) title match.
@@ -675,48 +696,6 @@ pending_git_updates() {
       head -n 5 <<<"$incoming" | sed 's/^/  /'
     ) || true
   done
-}
-
-media_stuck() {
-  local app
-  for app in sonarr radarr; do
-    resolve_arr "$app"
-    echo "--- $app"
-    arr_get "queue?pageSize=100&includeUnknownSeriesItems=true&includeSeries=true&includeEpisode=true&includeMovie=true" |
-      jq -r '
-        [.records[] | select(
-          .trackedDownloadState == "importPending"
-          or .trackedDownloadState == "importBlocked"
-          or (.trackedDownloadStatus != null and .trackedDownloadStatus != "ok")
-          or (.errorMessage != null and .errorMessage != "")
-        )]
-        | if length == 0 then "none" else .[]
-          | [(.series.title // .movie.title // "?")
-             + (if .episode then " S\(.episode.seasonNumber)E\(.episode.episodeNumber)" else "" end),
-             (.trackedDownloadState // "-"), (.trackedDownloadStatus // "-"), .title,
-             ([.errorMessage // empty] + [.statusMessages[]?.messages[]?] | join(" | "))]
-          | @tsv end' || echo "unreachable"
-  done
-}
-
-media_calendar() {
-  local days="$1" start end
-  start="$(date -u +%F)"
-  end="$(date -u -d "+${days} days" +%F)"
-  resolve_arr sonarr
-  echo "--- sonarr ($start to $end)"
-  arr_get "calendar?start=$start&end=$end&includeSeries=true" |
-    jq -r 'if length == 0 then "none" else .[]
-      | [(.airDateUtc // "?")[0:16], (.series.title // "?"),
-         "S\(.seasonNumber)E\(.episodeNumber)", (.title // "")]
-      | @tsv end'
-  resolve_arr radarr
-  echo "--- radarr ($start to $end)"
-  arr_get "calendar?start=$start&end=$end" |
-    jq -r 'if length == 0 then "none" else .[]
-      | [((.digitalRelease // .physicalRelease // .inCinemas // "?")[0:10]),
-         .title, (if .hasFile then "downloaded" else "missing" end)]
-      | @tsv end'
 }
 
 # Digest the registry serves for a tag right now, asked anonymously with HEAD (which doesn't count
@@ -1097,6 +1076,23 @@ case "$action" in
   media-stuck)
     [[ $# -eq 0 ]] || usage
     media_stuck
+    ;;
+  media-queue-remove)
+    [[ $# -eq 2 || $# -eq 3 ]] || usage
+    [[ "$1" == sonarr || "$1" == radarr ]] || die "app must be sonarr or radarr"
+    [[ "$2" =~ ^[0-9]{1,12}$ ]] || die "queue id must be a number"
+    case "${3:-}" in
+      "") blocklist=false ;;
+      blocklist) blocklist=true ;;
+      *) die "third argument can only be 'blocklist'" ;;
+    esac
+    media_queue_remove "$1" "$2" "$blocklist"
+    ;;
+  media-import-preview)
+    [[ $# -eq 2 ]] || usage
+    [[ "$1" == sonarr || "$1" == radarr ]] || die "app must be sonarr or radarr"
+    [[ "$2" =~ ^[0-9]{1,12}$ ]] || die "queue id must be a number"
+    media_import_preview "$1" "$2"
     ;;
   media-calendar)
     [[ $# -le 1 ]] || usage

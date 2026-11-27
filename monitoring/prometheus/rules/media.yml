@@ -2,14 +2,24 @@ groups:
   - name: media
     rules:
       - alert: ArrHealthIssue
-        # Same list as each app's System → Status page (failing indexer, download client unreachable, ...).
-        expr: sum by (instance) ({__name__=~"(sonarr|radarr|prowlarr)_system_health_issues"}) > 0
+        # Same list as each app's System → Status page (download client unreachable, import failing, ...).
+        expr: sum by (instance) ({__name__=~"(sonarr|radarr)_system_health_issues"}) > 0
         for: 30m
         labels:
           severity: warning
         annotations:
           summary: "{{ $labels.instance }} reports {{ $value }} health issue(s)"
           description: "Open the app's System → Status page for details."
+
+      - alert: ProwlarrHealthIssue
+        # Longer window: indexer/proxy failures (e.g. FlareSolverr timeouts) often recover on their own.
+        expr: sum by (instance) (prowlarr_system_health_issues) > 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} reports {{ $value }} health issue(s)"
+          description: "Open Prowlarr's System → Status page for details (failing indexers or proxies)."
 
       - alert: ArrExporterDown
         expr: up{instance=~"exportarr-.*"} == 0

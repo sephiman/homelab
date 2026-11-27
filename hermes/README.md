@@ -20,7 +20,7 @@ dangerous-command checks on container backends.
 | `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
 | Home Assistant: entity states (`ha-states`, `ha-state`), history (`ha-history`), logbook (`ha-logbook`), automations and their definitions (`ha-automations`, `ha-automation`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs, GPS coordinates and webhook ids are filtered out |
 | Backups (`backup-status`): latest local backup, checksum check, backup log, copies on Google Drive | Wrapper reads the archives folder as root and runs `rclone` inside the `backup` container; the rclone config never leaves it |
-| Media (`media-health`, `media-queue`, `media-title`, `media-releases`, `vpn-status`) | Wrapper calls Sonarr/Radarr/Prowlarr read-only endpoints on `127.0.0.1` with the API keys taken from their containers' env, passed to `curl` through a file descriptor (never on a command line). `media-releases` makes the apps search the indexers but grabs nothing. `vpn-status` asks `ipinfo.io` for gluetun's and the host's public IP |
+| Media (`media-health`, `media-queue`, `media-stuck`, `media-title`, `media-releases`, `media-import-preview`, `vpn-status`); removing a stuck download (`media-queue-remove`) | Wrapper calls Sonarr/Radarr/Prowlarr on `127.0.0.1` with the API keys taken from their containers' env, passed to `curl` through a file descriptor (never on a command line). `media-releases` makes the apps search the indexers but grabs nothing. The only write is `media-queue-remove`: deletes one queue item (and its download in qBittorrent), optionally blocklisting the release, which makes the app search for another. `vpn-status` asks `ipinfo.io` for gluetun's and the host's public IP |
 | Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
 | Postgres: reading `crypto_ambush`, `sharedledger`, `tradelog` and `tradeschool`, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; `CONNECT` granted only on those databases |
 | Project source code (`code-ls`, `code-show`, `code-grep`) and `git-pull` | Read from git `HEAD` as the folder's owner — gitignored files (`.env`…) are unreachable and secret-looking files (`.env*`, `*.key`, `*secret*`…) are refused even if committed |
@@ -237,7 +237,13 @@ it is stuck in the queue and why (`media-queue`), whether indexers or the downlo
 failing (`media-health`), and — if nothing was ever grabbed — runs an interactive search
 (`media-releases`) to show why each release was rejected (quality profile, custom formats, size,
 seeders). `vpn-status` checks that gluetun is up and that torrents leave through the VPN and not
-the host's IP. It reports and suggests; it can't grab, delete or change profiles.
+the host's IP. It can't grab or change profiles.
+
+"¿qué pasa con las descargas atascadas?" → `media-stuck` lists them with their queue ids and the
+reason. Fake releases (`.exe`/`.zip`) get removed and blocklisted (the app then searches for
+another), already-imported ones just removed — both with `media-queue-remove`, only after you say
+yes. Season packs Sonarr can't map (`Invalid season or episode`) are shown file by file with
+`media-import-preview`; mapping them stays a Manual Import in Sonarr's UI.
 
 ## Scheduled jobs
 
