@@ -24,7 +24,7 @@ table inet hermes_egress {
     ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10 } counter drop
     ip6 daddr { fc00::/7, fe80::/10 } counter drop
 
-    # Gemini and Telegram APIs (and the Hermes installer/updater).
+    # Any HTTPS site, on purpose: the agent may browse the whole internet (README "What to know").
     tcp dport 443 accept
     counter drop
   }

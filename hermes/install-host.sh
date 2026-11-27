@@ -6,8 +6,10 @@ set -euo pipefail
 
 readonly HERMES_USER=hermes
 readonly HERMES_HOME_DIR=/home/hermes
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly HOMELAB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+HOMELAB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly HOMELAB_DIR
 readonly HERMES_BIN="$HERMES_HOME_DIR/.local/bin/hermes"
 # hermes/.env holds one generic LLM_API_KEY; Hermes reads it from the provider's own variable.
 declare -rA PROVIDER_KEY_VARS=(
@@ -91,6 +93,7 @@ dashboard_password_hash_line() {
   if is_unset "$password"; then
     return 0
   fi
+  # shellcheck disable=SC2016  # Python source; the password reaches it through the environment
   DASHBOARD_PASSWORD="$password" python3 -c '
 import base64, hashlib, os, secrets
 salt = secrets.token_bytes(16)
@@ -272,6 +275,34 @@ schedule_jobs() {
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo $0"
 
+# Files the agent must not swap out. They live under its own home, where owning the parent folder
+# would let it rename even root-owned entries; the immutable flag stops that, and only root lifts it.
+readonly PROTECTED_PATHS=(
+  "$HERMES_HOME_DIR/workspace/AGENTS.md"
+  "$HERMES_HOME_DIR/AGENTS.md"
+  "$HERMES_HOME_DIR/.hermes/scripts"
+  "$HERMES_HOME_DIR/.hermes/skills/shopping/price-hunter"
+  "$HERMES_HOME_DIR/.hermes/skills/productivity/page-watcher"
+)
+
+unlock_protected_paths() {
+  local path
+  for path in "${PROTECTED_PATHS[@]}"; do
+    if [[ -e "$path" && ! -L "$path" ]]; then
+      chattr -i "$path"
+    fi
+  done
+}
+
+lock_protected_paths() {
+  local path
+  for path in "${PROTECTED_PATHS[@]}"; do
+    if [[ -e "$path" && ! -L "$path" ]]; then
+      chattr +i "$path" || die "chattr +i failed on $path (does this filesystem support immutable files?)"
+    fi
+  done
+}
+
 project_dirs() {
   {
     echo "$HOMELAB_DIR"
@@ -298,7 +329,17 @@ while read -r home; do
 done < <(owner_homes)
 
 step "Installing packages"
-apt-get install -y --no-install-recommends nftables postgresql-client git curl jq python3
+apt-get install -y --no-install-recommends nftables postgresql-client git curl jq python3 smartmontools openssl
+
+step "Installing the libraries of Hermes' headless browser"
+# Hermes downloads Chromium itself as the hermes user, but can't install the shared libraries it
+# links against (no root): without them the browser tool dies on start (libasound.so.2 missing).
+# Ubuntu 24.04+ names (t64); checked against 26.04's archive.
+apt-get install -y --no-install-recommends \
+  libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 \
+  libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
+  libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+  libfontconfig1 libfreetype6 fonts-liberation fonts-noto-color-emoji
 
 step "Creating user $HERMES_USER"
 if ! id "$HERMES_USER" &>/dev/null; then
@@ -363,16 +404,24 @@ systemctl enable hermes-egress.service
 systemctl restart hermes-egress.service
 
 step "Preparing $HERMES_HOME_DIR"
+# Locked again on any exit, including a failed run, so the files never stay writable.
+unlock_protected_paths
+trap lock_protected_paths EXIT
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/workspace" "$HERMES_HOME_DIR/.hermes"
-install -o "$HERMES_USER" -g "$HERMES_USER" -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HERMES_HOME_DIR/workspace/AGENTS.md"
+install -o root -g root -m 0644 "$SCRIPT_DIR/AGENTS.md" "$HERMES_HOME_DIR/workspace/AGENTS.md"
 # The gateway builds its context from the home dir, not terminal.cwd (hermes-agent issue #11763).
-ln -sfn workspace/AGENTS.md "$HERMES_HOME_DIR/AGENTS.md"
-chown -h "$HERMES_USER:$HERMES_USER" "$HERMES_HOME_DIR/AGENTS.md"
-# Pre-run scripts of the scheduled jobs (README "Scheduled jobs"); root-owned so the agent can't edit them.
-install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/.hermes/scripts"
+# A hard link, not a symlink: the immutable flag sits on the shared inode, so the agent can't
+# replace either name, whereas a symlink can't be made immutable.
+rm -f "$HERMES_HOME_DIR/AGENTS.md"
+ln "$HERMES_HOME_DIR/workspace/AGENTS.md" "$HERMES_HOME_DIR/AGENTS.md"
+# Pre-run scripts of the scheduled jobs (README "Scheduled jobs"); root-owned and immutable so the
+# agent can't edit or replace them.
+install -d -m 0755 "$HERMES_HOME_DIR/.hermes/scripts"
+chown root:root "$HERMES_HOME_DIR/.hermes/scripts"
+chmod 0755 "$HERMES_HOME_DIR/.hermes/scripts"
 install -o root -g root -m 0755 "$SCRIPT_DIR"/scripts/*.sh "$HERMES_HOME_DIR/.hermes/scripts/"
-# Skills shipped with the repo (README "Price hunting", "Page watching"); root-owned so a
-# self-improvement review can't rewrite them.
+# Skills shipped with the repo (README "Price hunting", "Page watching"); root-owned and immutable
+# so a self-improvement review can't rewrite or replace them.
 install -d -o "$HERMES_USER" -g "$HERMES_USER" -m 0700 "$HERMES_HOME_DIR/.hermes/skills" \
   "$HERMES_HOME_DIR/.hermes/skills/shopping" "$HERMES_HOME_DIR/.hermes/skills/productivity"
 install -d -o root -g root -m 0755 "$HERMES_HOME_DIR/.hermes/skills/shopping/price-hunter" \

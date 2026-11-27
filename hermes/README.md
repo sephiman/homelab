@@ -17,9 +17,10 @@ dangerous-command checks on container backends.
 |---------|-----|
 | Project list, container list, per-project status and logs, `git-status` (pending commits), filtered `inspect`, `docker.service` journal, which database each container uses (`databases`) | `sudo -n homelab-manage.sh <action>` — the only sudo rule `hermes` has; `databases` prints only the database name taken from a container's env (`DB_NAME`, `POSTGRES_DB`, or the path of a Postgres URL) |
 | `restart` / `update` (git pull + pull + up --build) / `update-images` (git pull + pull + up -d, no build), whole project or one service, of any Compose project; `restart-docker` | Same wrapper; it finds the project's folder and compose files from Docker's own labels |
-| `uptime`, `free`, `df`, `top`, `systemctl status docker` | Plain commands, no privilege needed |
-| Home Assistant: entity states (`ha-states`, `ha-state`), history (`ha-history`), logbook (`ha-logbook`), automations and their definitions (`ha-automations`, `ha-automation`), log (`ha-log`), switching lights (`ha-light`) | The wrapper holds a token Hermes never sees; its only write is `light.turn_on/off/toggle` on `light.*`; tokens, image URLs, GPS coordinates and webhook ids are filtered out |
-| Backups (`backup-status`): latest local backup, checksum check, backup log, copies on Google Drive | Wrapper reads the archives folder as root and runs `rclone` inside the `backup` container; the rclone config never leaves it |
+| `uptime`, `free`, `df`, `top`, `systemctl status docker`, `systemctl --failed`, `systemctl list-timers` | Plain commands, no privilege needed |
+| Disk health (`disk-health`), HTTPS certificate expiry (`cert-status`) | Wrapper runs `smartctl` as root and prints a summary per disk; reads the certificates Nginx Proxy Manager serves (`/etc/letsencrypt`, `/data/custom_ssl`) — public certificates only, never the private keys |
+| Home Assistant: entity states (`ha-states`, `ha-state`), history (`ha-history`), logbook (`ha-logbook`), automations and their definitions (`ha-automations`, `ha-automation`), log (`ha-log`), switching lights and switches (`ha-light`, `ha-switch`) | The wrapper holds a token Hermes never sees; its only writes are `turn_on/off/toggle` on `light.*` and `switch.*`; tokens, image URLs, GPS coordinates and webhook ids are filtered out |
+| Backups (`backup-status`): latest local backup, checksum check, backup log, copies on Google Drive; starting one now (`backup-run`) | Wrapper reads the archives folder as root and runs `rclone` inside the `backup` container; the rclone config never leaves it. `backup-run` starts the container's own `backup.sh` detached, and is refused while its lock is held |
 | Media (`media-health`, `media-queue`, `media-stuck`, `media-title`, `media-releases`, `media-import-preview`, `vpn-status`); removing a stuck download (`media-queue-remove`) | Wrapper calls Sonarr/Radarr/Prowlarr on `127.0.0.1` with the API keys taken from their containers' env, passed to `curl` through a file descriptor (never on a command line). `media-releases` makes the apps search the indexers but grabs nothing. The only write is `media-queue-remove`: deletes one queue item (and its download in qBittorrent), optionally blocklisting the release, which makes the app search for another. `vpn-status` asks `ipinfo.io` for gluetun's and the host's public IP |
 | Monitoring: Loki log search (`loki-search`, `loki-errors`), Prometheus queries (`metrics`), firing alerts (`alerts`) | Wrapper queries `127.0.0.1:3100` / `:9090` read-only; it builds the LogQL itself, PromQL is length-capped with a timeout. Alert rules stay code in `monitoring/prometheus/rules/` — Hermes only drafts them |
 | Postgres: reading `crypto_ambush`, `sharedledger`, `tradelog` and `tradeschool`, plus connections, locks and stats | `hermes_ro` role: `pg_read_all_data` + `pg_monitor`, read-only transactions, 30 s timeout, 3 connections; `CONNECT` granted only on those databases |
@@ -43,21 +44,34 @@ so the agent can't change them, add a second layer: `approvals.mode: manual`
 auto-approval in cron or one-shot sessions, and `HERMES_WRITE_SAFE_ROOT` limiting file writes to
 its own directories. Treat these as a seatbelt, not the wall.
 
+The files that steer the agent — `AGENTS.md`, the scheduled jobs' pre-run scripts and the repo's
+skills — sit in its own home, where owning the folder would let it rename even a root-owned file
+and drop in its own. `install-host.sh` makes them root-owned **and immutable** (`chattr +i`), so
+the kernel refuses to change, rename or delete them for anyone but root; it lifts the flag while it
+reinstalls them and sets it again on exit. The agent can still write its own memory and skills
+(held for your approval) and its own Hermes install in `~/.local`, which `hermes update` needs
+writable.
+
 The `browser`, `connections` and `cronjob` toolsets are left available on purpose. Keep in mind
 that a browser session logged into a web UI (Home Assistant, Grafana, Nginx Proxy Manager) with
 your credentials sidesteps every wrapper limit. Scheduled jobs get **no tools** by default
 (`platform_toolsets.cron: []`): a pre-run script gathers their data, so a run nobody watches
-can't restart anything. To switch a toolset off entirely, list it under
-`agent.disabled_toolsets` in `config.yaml`.
+can't restart anything. The bot creating its own scheduled jobs from chat (`cronjob` toolset) is a
+deliberate choice: such a job runs its prompt unattended, with whatever tools it opts into, and can
+also edit or remove the jobs `install-host.sh` made (re-running the script recreates removed ones,
+not edited ones). `approvals.cron_mode: deny` refuses dangerous commands in those runs, but wrapper
+calls aren't among them. To switch a toolset off, list it under `agent.disabled_toolsets` in
+`config.yaml`.
 
 ### What to know before relying on it
 
-- **Wrapper actions are not prompted.** Hermes' approval prompt only fires on its built-in
-  dangerous patterns; `sudo -n homelab-manage.sh restart media` doesn't match any. The agent's
-  instructions ([`AGENTS.md`](./AGENTS.md)) tell it to ask first, but the hard guarantee is only
-  that the worst it can do is restart or update an existing Compose project (or the Docker
-  daemon). That includes any app you deploy on the host, so live bots or anything with state
-  you care about are in reach of a restart.
+- **Wrapper actions are not prompted, on purpose.** Hermes' approval prompt only fires on its
+  built-in dangerous patterns; `sudo -n homelab-manage.sh restart media` doesn't match any. This is
+  deliberate so Hermes can update images on its own; there is no approval gate or out-of-band
+  notification for wrapper writes, and none is planned. Every call is still logged
+  (`journalctl -t homelab-manage`). The hard guarantee is only that the worst it can do is restart
+  or update an existing Compose project (or the Docker daemon). That includes any app you deploy
+  on the host, so live bots or anything with state you care about are in reach of a restart.
 - **Logs are attacker-controlled text.** Nginx access logs carry strings from the internet; a
   crafted line could try to steer the agent into a restart. That is why the wrapper is so narrow.
 - **`update` and `update-images` pull the whole git checkout** the project lives in (`git pull --ff-only` as the
@@ -66,12 +80,23 @@ can't restart anything. To switch a toolset off entirely, list it under
   `up -d --build`; `update-images` runs `pull` and `up -d` without `--build`, so prebuilt/registry
   images are pulled and started without rebuilding. Hermes cannot push or edit any checkout — it
   cannot even read them.
+- **Every `restart`, `update` and `update-images` waits for health.** Up to 2 minutes for containers
+  that are still starting, then it fails unless each one is running (and `healthy`, if it has a
+  healthcheck) or is a one-shot that exited 0, listing the state of each. `restart` takes an
+  optional service like `update`. A slow build plus that wait can exceed Hermes' 180 s command
+  timeout (`terminal.timeout`): the deploy still finishes, but the bot sees a timeout.
 - **Compose runs as the project folder's owner**, who must be in the `docker` group (you are, if you
   run `docker compose` without sudo). That keeps everything it writes — `~/.docker/buildx`, build
   output — owned by you, and uses your registry logins.
 - **Only projects that have containers are reachable.** The folder comes from the labels Compose
   puts on its containers, so a project that was taken `down` completely can't be found until you
   bring it up once by hand. Hermes can never start a project that was never deployed.
+- **Open internet on 443 is a deliberate choice.** The agent (terminal, browser, `page-watch`,
+  `price-hunt`) may reach any HTTPS site; there is no host allowlist or filtering proxy, and none
+  is planned. The accepted cost: an agent steered by injected text could send what it reads
+  (database rows, logs) to any server, and services you publish on a public domain are reachable
+  like any other site, still behind their own login. The firewall only keeps it off the LAN,
+  Docker networks and this host's own ports.
 - **`restart-docker` restarts every container**, Postgres included.
 - Every wrapper call is logged: `journalctl -t homelab-manage`.
 
@@ -86,13 +111,14 @@ can't restart anything. To switch a toolset off entirely, list it under
 | `hermes-gateway.service` | `/etc/systemd/system/hermes-gateway.service` |
 | `config.yaml` | `/etc/hermes/config.yaml` — Hermes' managed config (root-owned; wins over its own config) |
 | `.env.example` → `.env` | `/home/hermes/.hermes/.env` and `/home/hermes/.pgpass` |
-| `AGENTS.md` | `/home/hermes/workspace/AGENTS.md`, symlinked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
+| `AGENTS.md` | `/home/hermes/workspace/AGENTS.md` (root-owned, immutable), hard-linked as `/home/hermes/AGENTS.md` because the Telegram gateway loads context from the home dir, not `terminal.cwd` — the agent's operating instructions (loaded at session start; `/new` after changing it) |
 | `price-hunt/` | `/usr/local/lib/price-hunt` + `/usr/local/bin/price-hunt` (root-owned) — [price hunting](#price-hunting) |
 | `page-watch/` | `/usr/local/lib/page-watch` + `/usr/local/bin/page-watch` (root-owned) — [page watching](#page-watching) |
+| `homelab-manage-tests/` | Not installed: tests of `homelab-manage.sh` ([Testing the wrapper](#testing-the-wrapper)) |
 | `agent-context/` | `/usr/local/lib/agent-context` (root-owned) — what both CLIs read about Hermes: its model and key, timezone and Telegram chats |
-| `skills/price-hunter/SKILL.md` | `/home/hermes/.hermes/skills/shopping/price-hunter/` (root-owned file) |
-| `skills/page-watcher/SKILL.md` | `/home/hermes/.hermes/skills/productivity/page-watcher/` (root-owned file) |
-| `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned) — pre-run scripts of the [scheduled jobs](#scheduled-jobs), plus a generated `price-watch-<chat>.sh` / `page-watch-<chat>.sh` per chat |
+| `skills/price-hunter/SKILL.md` | `/home/hermes/.hermes/skills/shopping/price-hunter/` (root-owned, immutable folder) |
+| `skills/page-watcher/SKILL.md` | `/home/hermes/.hermes/skills/productivity/page-watcher/` (root-owned, immutable folder) |
+| `scripts/*.sh` | `/home/hermes/.hermes/scripts/` (root-owned, immutable folder) — pre-run scripts of the [scheduled jobs](#scheduled-jobs), plus a generated `price-watch-<chat>.sh` / `page-watch-<chat>.sh` per chat |
 | [`../postgres/hermes_ro.sql`](../postgres/hermes_ro.sql) | Run once inside `postgresdb` |
 
 ## Install
@@ -133,6 +159,10 @@ Prerequisites: the `postgres` stack is up and the app stacks have created their 
    sudo -iu hermes bash /tmp/hermes-install.sh --non-interactive --skip-browser --skip-computer-use
    ```
 
+   The browser tool still works: Hermes downloads its headless Chromium on first use, and
+   `install-host.sh` (step 3) installs the system libraries it needs, which `hermes` can't
+   (without them it fails with `libasound.so.2` missing).
+
 5. **Check the model and start the gateway:**
 
    ```bash
@@ -161,6 +191,8 @@ sudo -iu hermes psql service=homelab -c 'create table t(x int)'      # read-only
 sudo -iu hermes psql "service=homelab dbname=vaultwarden" -c 'select 1'  # permission denied for database
 sudo -iu hermes curl -sS -m 5 http://192.168.1.1        # times out (LAN blocked)
 sudo -iu hermes curl -sS -m 5 https://api.telegram.org  # responds
+sudo -iu hermes mv /home/hermes/.hermes/scripts /home/hermes/.hermes/s  # Operation not permitted
+sudo -iu hermes rm /home/hermes/AGENTS.md               # Operation not permitted
 ```
 
 Then from Telegram: message the bot from your account (it answers) and from another account
@@ -171,10 +203,10 @@ Then from Telegram: message the bot from your account (it answers) and from anot
 Hermes can read entity states ("¿está encendida la luz del salón?", "temperature in the
 bedroom?"), read the logbook (what changed when, and what caused it) and state history, check
 automations and the Home Assistant log for problems, explain why an automation didn't do what
-you expected, and switch **lights** on or off. It can't touch other devices, automations or configuration. A Home Assistant token can do far
+you expected, and switch **lights** and **switches** (smart plugs) on or off. It can't touch other devices, automations or configuration. A Home Assistant token can do far
 more than that, so it never reaches Hermes: `install-host.sh` stores it root-only in
 `/etc/homelab-manage/ha_auth_header`, and only the wrapper uses it — reads, plus
-`light.turn_on` / `turn_off` / `toggle` on `light.*` entities. The log comes from the
+`turn_on` / `turn_off` / `toggle` on `light.*` and `switch.*` entities. The log comes from the
 `homeassistant` container's output (`docker logs`), since the compose file discards the log file.
 
 ### Why didn't my automation work?
@@ -204,9 +236,9 @@ fire or which condition failed, and proposes the YAML fix; it can't apply it.
 3. `/new` in each chat so the agent sees the new actions.
 
 The non-admin user limits what the token could do if it ever leaked (no configuration changes),
-but it could still switch any device — which is why it stays root-only. Lights that Home Assistant
-exposes as `switch.*` (smart plugs) aren't covered; add their domain to `ha-light` only if you
-want them switchable.
+but it could still switch any device — which is why it stays root-only. Every `switch.*` is
+switchable, whatever it powers (a heater, the plug of this server): if one must never be switched
+from chat, expose it in Home Assistant under another domain or hide it from the `hermes` user.
 
 ## Monitoring and alerts
 
@@ -230,6 +262,21 @@ the model when one of its alerts starts firing, so it barely touches the Gemini 
 against `SHA256SUMS`, the backup log and the copies on Google Drive. The backup also exports
 `homelab_backup_*` metrics, and `monitoring/prometheus/rules/backup.yml` alerts when a run fails,
 no run has succeeded for 26 hours, or the Google Drive upload keeps failing (see [backup/README.md](../backup/README.md#monitoring)).
+
+"haz un backup ahora" → `backup-run` starts the nightly `backup.sh` in the `backup` container
+right away, detached (a full run outlasts the bot's command timeout), including the Google Drive
+upload. It is refused while another run holds the backup lock; check the result with `backup-status`.
+
+## Disks and certificates
+
+"¿cómo están los discos?" → `disk-health`: `smartctl` on every disk it finds, with the overall
+SMART verdict, temperature, power-on hours, NVMe wear and media errors, and the ATA counters that
+predict failure (reallocated, pending and uncorrectable sectors). It needs `smartmontools`, which
+`install-host.sh` installs.
+
+"¿caducan los certificados?" → `cert-status`: every certificate Nginx Proxy Manager serves, fewest
+days left first. It renews them 30 days before expiry, so one under 21 days means renewal is
+failing; the morning summary lists those too.
 
 "¿por qué no se descargó el último episodio de X?" → Hermes follows the chain: is it in the
 library and monitored (`media-title`), what its history says (grabbed, failed, imported), whether
@@ -276,9 +323,10 @@ the alert is about those. It remembers what it already reported, so each alert i
 reported once as `AlertWatcherCannotQueryPrometheus`.
 
 `install-host.sh` creates them once Hermes is installed, the reports delivered to the first id in
-`TELEGRAM_ALLOWED_USERS` and the watch jobs to their own chats; it holds their prompts and leaves jobs that already exist alone. Don't
-create them by asking the bot: a job made from chat has no pre-run script and keeps the bot's
-tools. Check them with `sudo -iu hermes /home/hermes/.local/bin/hermes cron list`.
+`TELEGRAM_ALLOWED_USERS` and the watch jobs to their own chats; it holds their prompts and leaves jobs that already exist alone. The
+bot can also create jobs from chat ("every Monday, tell me…"); jobs that must survive a reinstall
+or need a pre-run script belong in `install-host.sh`.
+Check them with `sudo -iu hermes /home/hermes/.local/bin/hermes cron list`.
 
 Besides health, the summary lists projects whose folder has commits upstream that aren't pulled
 yet (and whether `git pull --ff-only` can apply them), and containers on a floating tag (no tag,
@@ -319,7 +367,7 @@ offers, or ask for an alert — "tell me when it drops below €14". The `price-
 | Shop | Search | Price alerts |
 |------|--------|--------------|
 | AliExpress | Reads the public site, no API key needed; NL delivery, EUR, cheapest first | `price-hunt watch add "<name>" <€>` or `<link> <€>`; the chat's `price-watch-<chat id>` job checks hourly for the cheapest verified offer across sellers and messages that chat once per new low |
-| Amazon EU (`.nl`, `.de`, `.es`, `.fr`, `.it`) | Search links (Amazon answers scripts with captchas); with a browser tool Hermes may open them | Not from Hermes: set a tracker with Keepa on the product page |
+| Amazon EU (`.nl`, `.de`, `.es`, `.fr`, `.it`) | Search links (Amazon answers scripts with captchas); Hermes opens them with its browser tool. For a product (ASIN or link), `price-hunt keepa` gives Keepa's price-history chart per store, which Hermes reads to report current, lowest and highest price | Not from Hermes: set a tracker on the Keepa page `price-hunt keepa` links to |
 
 Watches match listings with the help of the model (the same one Hermes chats with, read from
 its managed config): each hourly check searches the product's name, and the model classifies
@@ -330,7 +378,10 @@ shipping, and unverified cheap results are often a variant or an accessory; the 
 Hermes to filter those and say so.
 
 The tool works out of the box after installation — no API keys or affiliate program signup
-required. Check it: `sudo -iu hermes price-hunt search shelly plus 1pm`.
+required. The Keepa charts come from Keepa's public chart image (`graph.keepa.com`), not its paid
+API, so Hermes reads the numbers off the image with the model's vision: good for "is this a good
+price?", not exact to the cent. Check it: `sudo -iu hermes price-hunt search shelly plus 1pm` and
+`sudo -iu hermes price-hunt keepa B09B8X9RGM`.
 
 Develop and test it with `uv` from `price-hunt/`: `uv run pytest`, `uv run mypy`,
 `uv run ruff check`. The tests run the CLI against a fake AliExpress site, no network needed.
@@ -440,6 +491,10 @@ as much as its price.
 |---|---|---|---|
 | Google Gemini, OpenAI-compatible (`custom:gemini`) | `gemini-4-hydrogen` *(default)*; any id from `https://generativelanguage.googleapis.com/v1beta/openai/models` | Free tier, or paid per token on a billed project | Free-tier content **is used to improve Google's products**; low quotas, and an agent turn makes several calls |
 | OpenRouter (`openrouter`) | `nvidia/nemotron-3-ultra-550b-a55b:free` *(fallback)*; other `:free` models with tool support, e.g. `minimax/minimax-m3.1-flash:free` | Free | 50 requests/day (20/min) until you buy 10 credits once, then 1,000/day. Free providers may log or train on prompts — check the model page and OpenRouter's privacy settings |
+
+This setup runs Gemini on a **billed** Google project: on paid services Google doesn't use
+prompts or responses to improve its products, so the free-tier catch above doesn't apply. Only the
+OpenRouter free fallback has that kind of catch.
 
 Prices and free tiers change; check [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
 and [OpenRouter models](https://openrouter.ai/models?max_price=0). One OpenRouter key also covers paid models, so
@@ -557,6 +612,22 @@ Vaultwarden gets no grant, so Hermes can't open it.
 
 Whatever it reads goes to the model provider — keep that in mind for financial data on free tiers.
 
+## Testing the wrapper
+
+`homelab-manage-tests/` runs the real `homelab-manage.sh` inside a
+[bubblewrap](https://github.com/containers/bubblewrap) sandbox (`bwrap`, unprivileged, no Docker
+needed) whose `/usr/local/bin` holds fake `docker`, `curl`, `runuser`, `smartctl`…: the wrapper
+pins `PATH` with `/usr/local/bin` first, so the fakes stand in without any test hook in the script.
+The tests check argument validation (nothing runs on a rejected call), the secret filters of the
+`code-*` actions against a real git repository, the health wait after deploys, the Home Assistant
+writes, `backup-run`'s lock, `disk-health` and `cert-status` (with real certificates), and run
+shellcheck on every script here.
+
+```bash
+cd hermes/homelab-manage-tests
+uv run pytest && uv run mypy && uv run ruff check && uv run ruff format --check
+```
+
 ## Maintenance
 
 - **Update Hermes:** `sudo -iu hermes /home/hermes/.local/bin/hermes update`, then
@@ -577,6 +648,8 @@ sudo rm /etc/systemd/system/hermes-{gateway,egress}.service /etc/sudoers.d/herme
   /usr/local/bin/homelab-manage.sh /usr/local/bin/price-hunt /usr/local/bin/page-watch
 sudo rm -r /etc/hermes /etc/homelab-manage /usr/local/lib/{price-hunt,page-watch,agent-context}
 sudo systemctl daemon-reload
+sudo chattr -R -i /home/hermes/AGENTS.md /home/hermes/workspace/AGENTS.md \
+  /home/hermes/.hermes/scripts /home/hermes/.hermes/skills    # immutable files block userdel -r
 sudo userdel -r hermes
 docker exec -it postgresdb psql -U root -d postgres -c 'DROP ROLE hermes_ro'
 ```

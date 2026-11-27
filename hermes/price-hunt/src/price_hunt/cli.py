@@ -11,6 +11,7 @@ from agent_context.llm import load_llm_config
 from price_hunt.aliexpress import AliExpressClient, Product, item_url, product_id_in, search_url
 from price_hunt.checking import LOWEST_PRICE_WINDOW, Finding, FindingKind, check_watch, check_watches
 from price_hunt.errors import InvalidInputError, PriceHuntError, VerifierError
+from price_hunt.keepa import DEFAULT_RANGE_DAYS, asin_in, keepa_links
 from price_hunt.llm import ListingVerifier
 from price_hunt.money import format_euros, format_min_drop, parse_euros, parse_min_drop
 from price_hunt.settings import load_settings
@@ -75,6 +76,22 @@ def _search(args: argparse.Namespace) -> int:
     encoded = urllib.parse.quote_plus(keywords)
     for name, base in AMAZON_SEARCHES + EU_COMPARISON_SEARCHES:
         print(f"{name} search: {base}{encoded}")
+    return 0
+
+
+def _keepa(args: argparse.Namespace) -> int:
+    asin = asin_in(args.product)
+    print(
+        f"Keepa price history of {asin}, last {args.range} days, per Amazon store. Each chart's legend "
+        "shows the current Amazon and new-offer prices; a chart saying 'no price history' means that "
+        "store doesn't sell it."
+    )
+    for links in keepa_links(asin, args.range):
+        print(
+            f"{links.store.name}: {links.product_url}\n"
+            f"   chart: {links.chart_url}\n"
+            f"   Keepa (history, price alerts): {links.keepa_url}"
+        )
     return 0
 
 
@@ -310,7 +327,8 @@ def _check(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="price-hunt", description="AliExpress prices delivered to NL, in EUR"
+        prog="price-hunt",
+        description="AliExpress prices delivered to NL, in EUR; Amazon EU price history via Keepa",
     )
     commands = parser.add_subparsers(required=True)
 
@@ -320,6 +338,11 @@ def _parser() -> argparse.ArgumentParser:
     search.add_argument("--limit", type=int, default=10)
     search.add_argument("--sort", choices=("best", "price"), default="best", help="AliExpress sort order")
     search.set_defaults(run=_search)
+
+    keepa = commands.add_parser("keepa", help="Keepa price history charts of an Amazon product")
+    keepa.add_argument("product", help="ASIN or Amazon product link (amazon.nl/.de/.es/.fr/.it/…/dp/<ASIN>)")
+    keepa.add_argument("--range", type=int, default=DEFAULT_RANGE_DAYS, help="days of history (1-365)")
+    keepa.set_defaults(run=_keepa)
 
     watch = commands.add_parser("watch", help="price-drop watches").add_subparsers(required=True)
     add = watch.add_parser(

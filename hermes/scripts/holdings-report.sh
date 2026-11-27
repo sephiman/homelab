@@ -14,7 +14,8 @@ readonly CRYPTO_STALE_HOURS=3
 readonly EQUITY_STALE_DAYS=4
 readonly STATE_DIR="${HERMES_HOME:-${HOME:-/home/hermes}/.hermes}/state"
 readonly STATE_FILE="$STATE_DIR/holdings-report-$HOUSEHOLD.tsv"
-readonly TODAY="$(TZ="$TIMEZONE" date +%F)"
+TODAY="$(TZ="$TIMEZONE" date +%F)"
+readonly TODAY
 
 # Rows: `household-missing`, `held <count>`, `block <crypto|etf-stocks|total> <today> <yesterday>`,
 # `closes <today's ETF/stock close date> <yesterday's>`, `unpriced <symbol>` (left out of the totals), `stale <symbol> <price date or time>`.

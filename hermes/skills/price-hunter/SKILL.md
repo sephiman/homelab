@@ -1,6 +1,6 @@
 ---
 name: price-hunter
-description: Find the cheapest AliExpress / Amazon EU (.nl, .de, .es, .fr, .it) offer of a product delivered to the Netherlands or Spain, identify products from photos/labels to price-check them, and set, list or remove AliExpress price-drop alerts. Use when the user asks where to buy something cheaper, sends a photo of a product or label, asks for a price, or asks to be told when a product drops to a price.
+description: Find the cheapest AliExpress / Amazon EU (.nl, .de, .es, .fr, .it) offer of a product delivered to the Netherlands or Spain, show Amazon price history from Keepa, identify products from photos/labels to price-check them, and set, list or remove AliExpress price-drop alerts. Use when the user asks where to buy something cheaper, sends a photo of a product or label, asks for a price, or asks to be told when a product drops to a price.
 ---
 
 # Price hunter
@@ -10,6 +10,7 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
 
 ```
 /usr/local/bin/price-hunt search <keywords> [--max <euros>] [--limit N] [--sort price]   # cheapest first, plus Amazon search links
+/usr/local/bin/price-hunt keepa <ASIN or Amazon product link> [--range <days>]   # Keepa history charts, 5 EU stores
 /usr/local/bin/price-hunt watch add "<product name>" <target euros> [--min-drop <euros|%>]
 /usr/local/bin/price-hunt watch add <aliexpress link or product id> <target euros> [--min-drop <euros|%>]
 /usr/local/bin/price-hunt watch list
@@ -33,8 +34,26 @@ Everything is for **delivery to the Netherlands, in euros**. One command does th
    `Amazon.es`, `Amazon.fr`, `Amazon.it`) plus the `Tweakers Pricewatch` and `Idealo` (`.nl`,
    `.de`, `.es`) links the tool printed — they often ship to both NL and Spain, and another EU
    store is frequently cheaper. Don't fetch Amazon pages with curl: Amazon answers scripts with
-   captchas. If you have a browser tool, you may open the search links and report the first
-   matching offers with their price and delivery; if it shows a captcha, give the links.
+   captchas. Open the search links with your browser tool and report the first matching offers
+   with their price and delivery; if it shows a captcha, give the links.
+5. **Always add Keepa for an Amazon product** — whenever you have its ASIN: from a product link
+   the user sent, or the `/dp/<ASIN>` in a result you opened in the browser. See below.
+
+## Keepa price history (Amazon)
+
+`price-hunt keepa <ASIN or link>` prints, for Amazon.nl, .de, .es, .fr and .it, the product
+link, a Keepa chart image of the last 90 days (`--range 365` for a year) and the Keepa page.
+
+1. Look at the charts with your vision tool (pass it the chart URL). At least Amazon.nl and
+   Amazon.de; all five when the user wants the cheapest store. From each chart read the current
+   price (the legend: "Amazon" is Amazon itself, "New" the cheapest new offer of any seller), the
+   lowest and highest price in the range and roughly when. A chart that says "no price history"
+   means that store doesn't sell it — say so, don't guess a price.
+2. Reply with, per store: current price, range low/high, and a verdict — e.g. "€34.99 on
+   Amazon.nl, lowest €29.99 in October, so not the best moment" or "at its 90-day low". Put the
+   chart URL of the most relevant store on its own line so Telegram shows the chart, and give the
+   Keepa page link for the full history and price alerts.
+3. Prices on the chart are what Keepa last saw; the Amazon page has the final price and delivery.
 
 ## Photo-to-price-check (Telegram photo of a product or label)
 
@@ -51,6 +70,7 @@ store price like "€49 here"):
      €X vs €49 in store", noting shipping/VAT may be extra on AliExpress),
    - Up to 5 matching AliExpress offers (filtering out accessories/variants) plus the Amazon EU
      search links (`.nl`, `.de`, `.es`, `.fr`, `.it`).
+   - If you found it on Amazon (browser) or the photo shows its ASIN, its Keepa history as above.
 
 ## "Tell me when X drops to €Y"
 
@@ -65,9 +85,10 @@ store price like "€49 here"):
   cheaper verified offers from other sellers alert too. One scheduled job per chat
   (`price-watch-<chat id>`, hourly) checks that chat's watches. Never create a cron job for an
   alert: those jobs cover all of them.
-- **Amazon EU (.nl, .de, .es, .fr, .it):** you can't watch Amazon. Tell the user to set a
-  price tracker with the Keepa extension on the product page (or on keepa.com), which alerts
-  them itself.
+- **Amazon EU (.nl, .de, .es, .fr, .it):** you can't watch Amazon. Run `price-hunt keepa` and
+  give the Keepa page link of their store: there the user sets a price tracker (with a free Keepa
+  account, or the Keepa browser extension), and Keepa alerts them itself. Show the chart too, so
+  they pick a target from the real price history.
 - **Which chat gets the alert:** the chat the request came from, by default (price-hunt reads
   `$HERMES_SESSION_CHAT_ID` itself, so pass nothing). When the user names another chat ("… and
   tell the family group"), add `--chat "<name>"` to `watch add`. If price-hunt answers that no chat

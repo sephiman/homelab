@@ -630,3 +630,41 @@ def test_check_reports_a_failure_once_in_each_chat_with_watches(
     outputs = [run(capsys, "check", "--chat", chat)[1] for chat in (OWNER_CHAT, FAMILY_CHAT) * 2]
 
     assert [out.startswith("PRICE CHECK FAILED") for out in outputs] == [True, True, False, False]
+
+
+def test_keepa_prints_charts_and_pages_of_every_eu_store_for_an_amazon_link(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code, out, _ = run(capsys, "keepa", "https://www.amazon.de/-/en/Echo-Dot/dp/b09b8x9rgm/ref=sr_1_1?th=1")
+
+    assert code == 0
+    assert "https://www.amazon.nl/dp/B09B8X9RGM" in out
+    assert "https://keepa.com/#!product/14-B09B8X9RGM" in out
+    assert "https://keepa.com/#!product/3-B09B8X9RGM" in out
+    assert "https://graph.keepa.com/pricehistory.png?asin=B09B8X9RGM&domain=es&range=90&amazon=1&new=1" in out
+    assert out.count("chart: ") == 5
+
+
+def test_keepa_takes_a_bare_asin_and_a_custom_range(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, _ = run(capsys, "keepa", "B09B8X9RGM", "--range", "365")
+
+    assert code == 0
+    assert "domain=it&range=365" in out
+
+
+@pytest.mark.parametrize(
+    ("reference", "message"),
+    [
+        ("https://amzn.eu/d/abc123", "short Amazon links hide the product"),
+        ("https://www.aliexpress.com/item/1005001.html", "not an ASIN or Amazon product link"),
+        ("shelly plus 1pm", "not an ASIN or Amazon product link"),
+    ],
+)
+def test_keepa_explains_what_it_needs_when_the_reference_is_not_an_amazon_product(
+    capsys: pytest.CaptureFixture[str], reference: str, message: str
+) -> None:
+    code, out, err = run(capsys, "keepa", reference)
+
+    assert code == 1
+    assert message in err
+    assert out == ""

@@ -14,6 +14,12 @@ readonly MAX_HISTORY_HOURS_AGO=720
 readonly LOKI_URL=http://127.0.0.1:3100
 readonly PROMETHEUS_URL=http://127.0.0.1:9090
 readonly BACKUP_CONTAINER=backup
+readonly PROXY_CONTAINER=nginx-proxy-manager
+# Nginx Proxy Manager renews 30 days before expiry, so fewer days left means renewal is failing.
+readonly CERT_WARN_DAYS=21
+# After restart/update: how long containers may stay starting before the action reports a failure.
+readonly HEALTH_TIMEOUT_SECONDS=120
+readonly HEALTH_POLL_SECONDS=3
 readonly VPN_CONTAINER=gluetun
 readonly POSTGRES_CONTAINER=postgresdb
 readonly DEFAULT_SEARCH_HOURS=24
@@ -35,6 +41,7 @@ readonly MAX_CODE_BYTES=200000
 # Committed by mistake or not, files named like secrets are never shown.
 readonly SECRET_PATH_PATTERN='(^|/)(\.env[^/]*|[^/]*\.(pem|key|p12|pfx|jks|keystore)|id_[a-z0-9]+|[^/]*(secret|credential|password)[^/]*)$'
 # Fixed template so `inspect` never prints Config.Env (passwords, tokens, DATABASE_URL).
+# shellcheck disable=SC2016  # a Go template for docker, not shell
 readonly INSPECT_FORMAT='{{.Name}}
   project:  {{index .Config.Labels "com.docker.compose.project"}}
   state:    {{.State.Status}} (started {{.State.StartedAt}}, exit {{.State.ExitCode}})
@@ -55,7 +62,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
   inspect <container>          state, health, image, networks, ports, mounts (never env)
   databases                    which Postgres database each container uses (only the name, from its env)
   journal [lines]              docker.service journal (default 100, max 500)
-  restart <project>            docker compose restart
+  restart <project> [service]  docker compose restart, then wait until healthy
   git-status <project>         branch, commits behind/ahead of the remote, last commits, local changes
   git-pull <project>           git pull --ff-only only (no rebuild; use update to redeploy)
   code-ls <project> [path]     files committed in the project's folder (git HEAD)
@@ -63,6 +70,7 @@ usage: sudo -n homelab-manage.sh <action> [args]
   code-grep <project> <text>   committed lines containing text (fixed string, max 300 lines)
   update  <project> [service]         git pull --ff-only (if a git checkout), compose pull, up -d --build
   update-images <project> [service]   git pull --ff-only (if a git checkout), compose pull, up -d (no build)
+                               both wait until the containers are healthy and fail if they aren't
   restart-docker               systemctl restart docker (restarts everything)
   ha-states [domain]           Home Assistant entities with state (optionally one domain: light, sensor…)
   ha-state <entity_id>         one Home Assistant entity with its attributes (secrets/location hidden)
@@ -72,13 +80,17 @@ usage: sudo -n homelab-manage.sh <action> [args]
   ha-automation <automation.entity>   one automation's triggers, conditions and actions (automations.yaml)
   ha-history <entity_id> [hours] [ending_hours_ago]   state changes of one entity, sensors included
                                (default 24h ending now, max 168h, ending up to 720h ago; last 500)
-  ha-light <on|off|toggle> <light.entity>   switch a light — the only Home Assistant write allowed
+  ha-light <on|off|toggle> <light.entity>     switch a light
+  ha-switch <on|off|toggle> <switch.entity>   switch a switch/smart plug (the only other HA write)
   ha-energy                    Home Assistant energy (kWh/Wh) and power (W) sensors
   loki-search <project> <text> [hours]   log lines containing text, any container of a project (default 24h, max 720h; newest 500)
   loki-errors [project] [hours]          error/exception/fatal/panic lines, one project or all (same limits)
   metrics <promql>             one Prometheus instant query (max 500 chars)
   alerts                       Prometheus alerts currently pending or firing, with their labels
   backup-status                last backup: files, checksums, size check, log, copies on Google Drive
+  backup-run                   start a backup now, like the nightly one (detached; refused while one runs)
+  disk-health                  SMART health of every disk: status, temperature, wear, bad sectors
+  cert-status                  Nginx Proxy Manager certificates: days left, domains (oldest first)
   vpn-status                   gluetun health and its public IP vs. the host's (torrent leak check)
   media-health                 Sonarr/Radarr/Prowlarr health checks (indexers, download client…)
   media-queue                  Sonarr/Radarr download queue (queue id first) with status and errors
@@ -94,8 +106,8 @@ usage: sudo -n homelab-manage.sh <action> [args]
                                search indexers now and list releases with why each is rejected
                                (slow; grabs nothing)
   capacity-report              disk usage, Docker disk usage, and Postgres database sizes
-  daily-report                 one-page summary: alerts, backup, disk, errors, updates (Ubuntu,
-                               git, images), media, HA batteries/safety
+  daily-report                 one-page summary: alerts, backup, disk, certificates, errors,
+                               updates (Ubuntu, git, images), media, HA batteries/safety
 EOF
   exit 2
 }
@@ -219,13 +231,14 @@ ha_get() {
   curl -fsS --max-time 15 -H "@$HA_AUTH_HEADER_FILE" "$HA_URL/api/$1"
 }
 
-# The only Home Assistant service the wrapper ever calls; the entity is validated as light.* first.
-ha_light() {
-  local action="$1" entity="$2"
+# The only Home Assistant services the wrapper ever calls: on/off/toggle of an entity already
+# validated as light.* or switch.*.
+ha_turn() {
+  local domain="$1" action="$2" entity="$3"
   require_ha_token
   curl -fsS --max-time 15 -X POST -H "@$HA_AUTH_HEADER_FILE" -H 'Content-Type: application/json' \
     -d "$(jq -n --arg entity "$entity" '{entity_id: $entity}')" \
-    "$HA_URL/api/services/light/$action" >/dev/null
+    "$HA_URL/api/services/$domain/$action" >/dev/null
   ha_get "states/$entity" | jq -r '"\(.entity_id): \(.state)"'
 }
 
@@ -322,6 +335,10 @@ hours_arg() {
   echo "$hours"
 }
 
+require_service_name() {
+  [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]] || die "invalid service name '$1'"
+}
+
 require_project_name() {
   [[ "$1" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] || die "invalid project name '$1'"
 }
@@ -395,6 +412,7 @@ backup_status() {
   prev="$(find "$archives" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -n 2 | head -n 1)"
   [[ "$prev" != "$latest" ]] || prev=""
   echo "--- latest local backup: $(basename "$latest")"
+  # shellcheck disable=SC2012  # for reading, not parsing: archive names are our own dated files
   ls -lh "$latest" | tail -n +2
   [[ -e "$latest/.pending-upload" ]] && echo "not on Google Drive yet: upload pending (retried hourly at :35)"
   echo "--- checksums"
@@ -430,9 +448,73 @@ backup_status() {
   docker logs --tail 300 "$BACKUP_CONTAINER" 2>&1 |
     grep -E '===|ready|Uploading|Uploaded|ERROR|Error|error|FAILED|failed|denied' | tail -n 25 || true
   echo "--- on Google Drive"
+  # shellcheck disable=SC2016  # expanded by sh inside the container, where RCLONE_* are set
   timeout 120 docker exec "$BACKUP_CONTAINER" sh -c \
     'rclone lsf --dirs-only "$RCLONE_REMOTE:$RCLONE_PATH" && echo "latest:" &&
      rclone size "$RCLONE_REMOTE:$RCLONE_PATH/$1"' sh "$(basename "$latest")" 2>&1 | tail -n 20
+}
+
+# Starts the nightly backup now, detached: it runs for many minutes, longer than the agent waits for a
+# command. backup.sh takes a lock in the archives folder; testing it here reports a run in progress
+# instead of starting one that would only skip itself.
+backup_run() {
+  local archives
+  archives="$(container_mount_source "$BACKUP_CONTAINER" /backups)"
+  [[ -n "$archives" && -d "$archives" ]] || die "no $BACKUP_CONTAINER container with a /backups folder"
+  exec 8>>"$archives/.backup.lock"
+  flock -n 8 || die "a backup is already running (see backup-status)"
+  exec 8>&-
+  docker exec --detach "$BACKUP_CONTAINER" bash -c \
+    '. /etc/backup.env; /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1'
+  echo "backup started; it takes a while — check it with backup-status"
+}
+
+# smartctl's exit code is a bit mask that is non-zero for mere warnings, so only its JSON counts.
+disk_health() {
+  local device type report found=0
+  while read -r device type; do
+    found=1
+    report="$(smartctl --json --info --health --attributes --device "$type" "$device" 2>/dev/null)" || true
+    if [[ -z "$report" ]]; then
+      echo "$device: could not read SMART data"
+      continue
+    fi
+    jq -r --arg device "$device" '
+      "\($device)  \(.model_name // "unknown model")  \(
+        if .smart_status.passed == true then "PASSED"
+        elif .smart_status.passed == false then "FAILED"
+        else "no SMART status" end)",
+      (.temperature.current // empty | "  temperature \(.)°C"),
+      (.power_on_time.hours // empty | "  powered on \(.) h"),
+      (.nvme_smart_health_information_log // empty
+        | "  wear \(.percentage_used)% used, \(.media_errors) media errors, critical warning \(.critical_warning)"),
+      (.ata_smart_attributes.table[]? | select(.id | IN(5, 187, 197, 198)) | "  \(.name): \(.raw.value)")
+    ' <<<"$report" 2>/dev/null || echo "$device: could not read SMART data"
+  done < <(smartctl --json --scan | jq -r '.devices[]? | "\(.name) \(.type)"')
+  (( found )) || echo "no disks found by smartctl --scan"
+}
+
+# Every certificate Nginx Proxy Manager serves (Let's Encrypt and uploaded custom ones), fewest days
+# left first. Dates go through jq, not `date -d`, which differs under Ubuntu's uutils.
+cert_status() {
+  local letsencrypt data cert end names days now flag
+  letsencrypt="$(container_mount_source "$PROXY_CONTAINER" /etc/letsencrypt)"
+  data="$(container_mount_source "$PROXY_CONTAINER" /data)"
+  [[ -n "$letsencrypt$data" ]] || die "no $PROXY_CONTAINER container with /etc/letsencrypt or /data mounted"
+  now="$(date +%s)"
+  while IFS= read -r -d '' cert; do
+    end="$(openssl x509 -noout -enddate -dateopt iso_8601 -in "$cert" | cut -d= -f2)"
+    days=$(( ($(jq -rn --arg end "$end" '$end | sub(" "; "T") | fromdateiso8601') - now) / 86400 ))
+    names="$(openssl x509 -noout -ext subjectAltName -in "$cert" | tail -n +2 | tr -d ' ' | sed 's/DNS://g')"
+    flag=""
+    if (( days < 0 )); then
+      flag="  EXPIRED"
+    elif (( days < CERT_WARN_DAYS )); then
+      flag="  RENEW SOON (renewal is failing)"
+    fi
+    printf '%d\t%s\t%s%s\n' "$days" "${end% *}" "${names:-no domain names}" "$flag"
+  done < <(find "${letsencrypt:-/nonexistent}/live" "${data:-/nonexistent}/custom_ssl" \
+    -name fullchain.pem -print0 2>/dev/null) | sort -n | awk -F'\t' '{ printf "%5d days  %s  %s\n", $1, $2, $3 }'
 }
 
 # qBittorrent shares gluetun's network, so gluetun's public IP is the one torrents use.
@@ -738,7 +820,7 @@ pending_image_updates() {
       registry="${name%%/*}"
       repository="${name#*/}"
     else
-      registry=registry-1.docker.io
+      registry="registry-1.docker.io"
       repository="${name#docker.io/}"
       [[ "$repository" == */* ]] || repository="library/$repository"
     fi
@@ -767,6 +849,8 @@ daily_report() {
   prometheus_query 'homelab_backup_offsite_pending' | sed 's/$/ backup(s) waiting for Google Drive/' || true
   echo "=== disk (used %)"
   df -h -x tmpfs -x overlay -x devtmpfs -x squashfs -x efivarfs || true
+  echo "=== certificates expiring within $CERT_WARN_DAYS days"
+  cert_status 2>&1 | grep -E 'EXPIRED|RENEW SOON|homelab-manage:' || echo "none"
   echo "=== containers not running or unhealthy"
   docker ps --all --format '{{.Names}} | {{.Status}}' | grep -vE '\| Up [^(]*$|\(healthy\)' || echo "none"
   echo "=== restarts in 24h (by container)"
@@ -889,7 +973,7 @@ update_project() {
   resolve_project "$project"
   local service_args=() pull_args=() up_args=()
   if [[ $# -eq 1 ]]; then
-    [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]] || die "invalid service name '$1'"
+    require_service_name "$1"
     service_args=("$1")
   fi
   if [[ "$mode" == build ]]; then
@@ -900,6 +984,26 @@ update_project() {
   git_pull
   compose "$project" pull "${pull_args[@]}" "${service_args[@]}"
   compose "$project" up -d "${up_args[@]}" "${service_args[@]}"
+  wait_until_healthy "$project" "${service_args[@]}"
+}
+
+# Waits while containers are still starting, then fails unless every one is running (and healthy,
+# if it has a healthcheck) or is a one-shot that exited 0, so a broken deploy never reads as done.
+wait_until_healthy() {
+  local project="$1" deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS)) states
+  shift
+  while true; do
+    states="$(compose "$project" ps --all --format '{{.Name}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}' "$@")"
+    awk -F'\t' '$2 ~ /^(created|restarting)$/ || $3 == "starting" { busy = 1 } END { exit !busy }' \
+      <<<"$states" || break
+    (( SECONDS < deadline )) || break
+    sleep "$HEALTH_POLL_SECONDS"
+  done
+  echo "--- containers after deploy (name, state, health, exit code)"
+  echo "$states"
+  awk -F'\t' '!(($2 == "running" && ($3 == "" || $3 == "healthy")) || ($2 == "exited" && $4 == 0)) { bad = 1 }
+    END { exit bad }' <<<"$states" ||
+    die "not healthy after the deploy (waited up to ${HEALTH_TIMEOUT_SECONDS}s): check logs <project>"
 }
 
 [[ $# -ge 1 ]] || usage
@@ -943,10 +1047,14 @@ case "$action" in
     journalctl --unit docker.service --no-pager --lines "$lines"
     ;;
   restart)
-    [[ $# -eq 1 ]] || usage
+    [[ $# -eq 1 || $# -eq 2 ]] || usage
     resolve_project "$1"
+    if [[ $# -eq 2 ]]; then
+      require_service_name "$2"
+    fi
     hold_lock
-    compose "$1" restart
+    compose "$1" restart "${@:2}"
+    wait_until_healthy "$1" "${@:2}"
     ;;
   git-pull)
     [[ $# -eq 1 ]] || usage
@@ -1028,7 +1136,7 @@ case "$action" in
     [[ "$1" =~ ^[a-z_]+\.[a-z0-9_]+$ ]] || die "invalid entity_id"
     hours="$(ha_hours_arg "${2:-}")"
     ending_hours_ago="${3:-0}"
-    [[ "$ending_hours_ago" =~ ^[0-9]{1,3}$ ]] && (( ending_hours_ago <= MAX_HISTORY_HOURS_AGO )) ||
+    { [[ "$ending_hours_ago" =~ ^[0-9]{1,3}$ ]] && (( ending_hours_ago <= MAX_HISTORY_HOURS_AGO )); } ||
       die "ending_hours_ago must be 0-$MAX_HISTORY_HOURS_AGO"
     ha_history "$1" "$hours" "$ending_hours_ago"
     ;;
@@ -1060,6 +1168,18 @@ case "$action" in
   backup-status)
     [[ $# -eq 0 ]] || usage
     backup_status
+    ;;
+  backup-run)
+    [[ $# -eq 0 ]] || usage
+    backup_run
+    ;;
+  disk-health)
+    [[ $# -eq 0 ]] || usage
+    disk_health
+    ;;
+  cert-status)
+    [[ $# -eq 0 ]] || usage
+    cert_status
     ;;
   vpn-status)
     [[ $# -eq 0 ]] || usage
@@ -1097,7 +1217,7 @@ case "$action" in
   media-calendar)
     [[ $# -le 1 ]] || usage
     days="${1:-7}"
-    [[ "$days" =~ ^[0-9]{1,2}$ ]] && (( days >= 1 && days <= 30 )) || die "days must be 1-30"
+    { [[ "$days" =~ ^[0-9]{1,2}$ ]] && (( days >= 1 && days <= 30 )); } || die "days must be 1-30"
     media_calendar "$days"
     ;;
   media-title)
@@ -1124,16 +1244,17 @@ case "$action" in
     [[ $# -eq 0 ]] || usage
     ha_energy
     ;;
-  ha-light)
+  ha-light | ha-switch)
     [[ $# -eq 2 ]] || usage
+    domain="${action#ha-}"
     case "$1" in
       on) service=turn_on ;;
       off) service=turn_off ;;
       toggle) service=toggle ;;
-      *) die "light action must be on, off or toggle" ;;
+      *) die "$domain action must be on, off or toggle" ;;
     esac
-    [[ "$2" =~ ^light\.[a-z0-9_]+$ ]] || die "only light.* entities can be switched"
-    ha_light "$service" "$2"
+    [[ "$2" =~ ^$domain\.[a-z0-9_]+$ ]] || die "only $domain.* entities can be switched with $action"
+    ha_turn "$domain" "$service" "$2"
     ;;
   *)
     usage
